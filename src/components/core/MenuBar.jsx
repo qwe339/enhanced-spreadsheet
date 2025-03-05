@@ -62,13 +62,25 @@ const menuItems = [
 const MenuBar = ({ onMenuItemClick }) => {
   const [activeMenu, setActiveMenu] = useState(null);
 
-  const handleMenuClick = (menuId) => {
-    if (activeMenu === menuId) {
-      setActiveMenu(null);
-    } else {
-      setActiveMenu(menuId);
-    }
-  };
+const handleMenuClick = (menuId) => {
+  if (activeMenu === menuId) {
+    setActiveMenu(null);
+  } else {
+    setActiveMenu(menuId);
+    // メニュードロップダウンの位置を調整するため、次のフレームで実行
+    setTimeout(() => {
+      const menuDropdowns = document.querySelectorAll('.menu-dropdown');
+      menuDropdowns.forEach(dropdown => {
+        // ドロップダウンが画面の下に隠れないように位置調整
+        const rect = dropdown.getBoundingClientRect();
+        if (rect.bottom > window.innerHeight) {
+          dropdown.style.maxHeight = `${window.innerHeight - rect.top - 20}px`;
+          dropdown.style.overflowY = 'auto';
+        }
+      });
+    }, 0);
+  }
+};
 
 const handleMenuItemClick = (itemId) => {
   console.log('Menu item clicked:', itemId);
