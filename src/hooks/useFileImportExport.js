@@ -1,124 +1,247 @@
 import { useCallback } from 'react';
 import { useSpreadsheet } from '../context/SpreadsheetContext';
 import useSpreadsheetData from './useSpreadsheetData';
+import { parse as parseCSV, unparse as unparseCSV } from 'papaparse';
 
 /**
- * 元に戻す/やり直し機能を管理するためのカスタムフック
+ * ファイルのインポート/エクスポート機能を管理するためのカスタムフック
  */
-const useUndoRedo = () => {
+const useFileImportExport = () => {
   const { state, dispatch, actionTypes } = useSpreadsheet();
-  const { setModified, updateStatusMessage } = useSpreadsheetData();
+  const { 
+    updateStatusMessage, 
+    setModified, 
+    setFilename, 
+    setLastSaved,
+    updateCurrentSheetData 
+  } = useSpreadsheetData();
   
   /**
-   * 現在の状態をアンドゥスタックにプッシュする
-   * @param {Object} hotInstance Handsontableインスタンス
+   * 現在のスプレッドシートをローカルストレージに保存する
    */
-  const pushToUndoStack = useCallback((hotInstance) => {
-    if (!hotInstance) return;
-    
-    // 現在のデータをスナップショットとして保存
-    const currentData = hotInstance.getData();
-    
-    dispatch({
-      type: actionTypes.PUSH_TO_UNDO_STACK,
-      payload: {
-        sheetId: state.currentSheet,
-        data: JSON.parse(JSON.stringify(currentData))
+  const saveToLocalStorage = useCallback(() => {
+    try {
+      // 保存するデータを準備
+      const saveData = {
+        sheets: state.sheets,
+        sheetData: state.sheetData,
+        cellStyles: state.cellStyles,
+        conditionalFormats: state.conditionalFormats,
+        charts: state.charts,
+        comments: state.comments,
+        protectedCells: state.protectedCells,
+        dataValidations: state.dataValidations,
+        filename: state.currentFilename,
+      };
+      
+      // ローカルストレージに保存
+      localStorage.setItem(
+        `spreadsheet_${state.currentFilename}`, 
+        JSON.stringify(saveData)
+      );
+      
+      // ファイル一覧を更新
+      const savedFiles = JSON.parse(localStorage.getItem('spreadsheet_files') || '[]');
+      if (!savedFiles.includes(state.currentFilename)) {
+        savedFiles.push(state.currentFilename);
+        localStorage.setItem('spreadsheet_files', JSON.stringify(savedFiles));
       }
-    });
-  }, [state.currentSheet, dispatch, actionTypes]);
+      
+      // 最終保存日時を更新
+      const timestamp = new Date().toISOString();
+      setLastSaved(timestamp);
+      
+      // 変更フラグをクリア
+      setModified(false);
+      
+      updateStatusMessage('ファイルを保存しました', 3000);
+    } catch (error) {
+      console.error('保存エラー:', error);
+      updateStatusMessage('ファイルの保存中にエラーが発生しました', 3000);
+    }
+  }, [state, dispatch, actionTypes, setLastSaved, setModified, updateStatusMessage]);
   
   /**
-   * 元に戻す操作
+   * 名前を付けて保存
+   * @param {string} filename 保存するファイル名
+   */
+  const saveAs = useCallback((filename) => {
+    if (!filename) return;
+    
+    try {
+      // ファイル名を更新
+      setFilename(filename);
+      
+      // ファイルを保存
+      setTimeout(() => {
+        saveToLocalStorage();
+      }, 0);
+    } catch (error) {
+      console.error('名前を付けて保存エラー:', error);
+      updateStatusMessage('ファイルの保存中にエラーが発生しました', 3000);
+    }
+  }, [setFilename, saveToLocalStorage, updateStatusMessage]);
+  
+  /**
+   * ローカルストレージから保存されたファイルを読み込む
+   * @param {string} filename 読み込むファイル名
+   */
+  const loadSavedFile = useCallback((filename) => {
+    if (!filename) return;
+    
+    try {
+      // ローカルストレージからデータを取得
+      const savedData = localStorage.getItem(`spreadsheet_${filename}`);
+      if (!savedData) {
+        updateStatusMessage(`ファイル '${filename}' が見つかりません`, 3000);
+        return;
+      }
+      
+      const parsedData = JSON.parse(savedData);
+      
+      // スプレッドシートの状態を更新
+      dispatch({
+        type: actionTypes.LOAD_SPREADSHEET,
+        payload: {
+          sheets: parsedData.sheets || ['sheet1'],
+          sheetData: parsedData.sheetData || { 'sheet1': Array(50).fill().map(() => Array(26).fill('')) },
+          cellStyles: parsedData.cellStyles || {},
+          conditionalFormats: parsedData.conditionalFormats || {},
+          charts: parsedData.charts || [],
+          comments: parsedData.comments || {},
+          protectedCells: parsedData.protectedCells || {},
+          dataValidations: parsedData.dataValidations || {},
+          currentSheet: parsedData.sheets ? parsedData.sheets[0] : 'sheet1',
+          currentFilename: filename,
+          lastSaved: new Date().toISOString()
+        }
+      });
+      
+      updateStatusMessage(`ファイル '${filename}' を読み込みました`, 3000);
+    } catch (error) {
+      console.error('ファイル読み込みエラー:', error);
+      updateStatusMessage('ファイルの読み込み中にエラーが発生しました', 3000);
+    }
+  }, [dispatch, actionTypes, updateStatusMessage]);
+  
+  /**
+   * ローカルストレージから保存されたファイル一覧を取得する
+   * @returns {Array} 保存されたファイル名の配列
+   */
+  const getSavedFilesList = useCallback(() => {
+    try {
+      const savedFiles = JSON.parse(localStorage.getItem('spreadsheet_files') || '[]');
+      return savedFiles;
+    } catch (error) {
+      console.error('ファイル一覧取得エラー:', error);
+      return [];
+    }
+  }, []);
+  
+  /**
+   * CSVファイルをインポートする
+   * @param {string} csvContent CSVの内容
+   * @param {Object} options インポートオプション
+   */
+  const importCSV = useCallback((csvContent, options = {}) => {
+    try {
+      // CSVを解析
+      parseCSV(csvContent, {
+        complete: (results) => {
+          const { data } = results;
+          if (!data || data.length === 0) {
+            updateStatusMessage('CSVデータが空です', 3000);
+            return;
+          }
+          
+          // 現在のシートにデータを設定
+          updateCurrentSheetData(data);
+          setModified(true);
+          
+          updateStatusMessage('CSVをインポートしました', 3000);
+        },
+        error: (error) => {
+          console.error('CSVインポートエラー:', error);
+          updateStatusMessage('CSVのインポート中にエラーが発生しました', 3000);
+        },
+        ...options
+      });
+    } catch (error) {
+      console.error('CSVインポートエラー:', error);
+      updateStatusMessage('CSVのインポート中にエラーが発生しました', 3000);
+    }
+  }, [updateCurrentSheetData, setModified, updateStatusMessage]);
+  
+  /**
+   * Excelファイルをインポートする (実際のところ現在はモック)
+   * @param {File} file Excelファイル
+   */
+  const importExcel = useCallback((file) => {
+    // 実際の実装では、sheetjs/xlsx などのライブラリを使用する
+    updateStatusMessage('Excel機能は現在実装中です', 3000);
+  }, [updateStatusMessage]);
+  
+  /**
+   * 現在のシートをCSVとしてエクスポートする
    * @param {Object} hotInstance Handsontableインスタンス
    */
-  const undo = useCallback((hotInstance) => {
-    if (!hotInstance || state.undoStack.length === 0) {
-      updateStatusMessage('これ以上元に戻せません', 2000);
+  const exportCSV = useCallback((hotInstance) => {
+    if (!hotInstance) {
+      updateStatusMessage('エクスポートするデータがありません', 3000);
       return;
     }
     
-    // 現在の状態をリドゥスタックにプッシュ
-    const currentData = hotInstance.getData();
-    
-    dispatch({
-      type: actionTypes.PUSH_TO_REDO_STACK,
-      payload: {
-        sheetId: state.currentSheet,
-        data: JSON.parse(JSON.stringify(currentData))
-      }
-    });
-    
-    // アンドゥスタックから前の状態を取得
-    const lastState = state.undoStack[state.undoStack.length - 1];
-    if (lastState && lastState.sheetId === state.currentSheet) {
-      // 前の状態に戻す
-      hotInstance.loadData(lastState.data);
+    try {
+      // データを取得
+      const data = hotInstance.getData();
       
-      // アンドゥスタックから取り出す
-      dispatch({ type: actionTypes.POP_FROM_UNDO_STACK });
+      // CSVに変換
+      const csv = unparseCSV(data);
       
-      // 変更フラグを更新
-      setModified(true);
+      // ダウンロードリンクを作成
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${state.currentFilename}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
       
-      updateStatusMessage('操作を元に戻しました', 2000);
+      // ダウンロードを実行
+      link.click();
+      
+      // クリーンアップ
+      document.body.removeChild(link);
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 100);
+      
+      updateStatusMessage('CSVをエクスポートしました', 3000);
+    } catch (error) {
+      console.error('CSVエクスポートエラー:', error);
+      updateStatusMessage('CSVのエクスポート中にエラーが発生しました', 3000);
     }
-  }, [state.currentSheet, state.undoStack, dispatch, actionTypes, setModified, updateStatusMessage]);
+  }, [state.currentFilename, updateStatusMessage]);
   
   /**
-   * やり直し操作
+   * 現在のシートをExcelとしてエクスポートする (実際のところ現在はモック)
    * @param {Object} hotInstance Handsontableインスタンス
    */
-  const redo = useCallback((hotInstance) => {
-    if (!hotInstance || state.redoStack.length === 0) {
-      updateStatusMessage('これ以上やり直せません', 2000);
-      return;
-    }
-    
-    // 現在の状態をアンドゥスタックにプッシュ
-    const currentData = hotInstance.getData();
-    
-    dispatch({
-      type: actionTypes.PUSH_TO_UNDO_STACK,
-      payload: {
-        sheetId: state.currentSheet,
-        data: JSON.parse(JSON.stringify(currentData))
-      }
-    });
-    
-    // リドゥスタックから次の状態を取得
-    const nextState = state.redoStack[state.redoStack.length - 1];
-    if (nextState && nextState.sheetId === state.currentSheet) {
-      // 次の状態に進む
-      hotInstance.loadData(nextState.data);
-      
-      // リドゥスタックから取り出す
-      dispatch({ type: actionTypes.POP_FROM_REDO_STACK });
-      
-      // 変更フラグを更新
-      setModified(true);
-      
-      updateStatusMessage('操作をやり直しました', 2000);
-    }
-  }, [state.currentSheet, state.redoStack, dispatch, actionTypes, setModified, updateStatusMessage]);
-  
-  /**
-   * アンドゥ/リドゥスタックをクリアする
-   */
-  const clearUndoRedoStack = useCallback(() => {
-    dispatch({ type: actionTypes.CLEAR_UNDO_REDO_STACK });
-  }, [dispatch, actionTypes]);
+  const exportExcel = useCallback((hotInstance) => {
+    // 実際の実装では、sheetjs/xlsx などのライブラリを使用する
+    updateStatusMessage('Excel機能は現在実装中です', 3000);
+  }, [updateStatusMessage]);
   
   return {
-    undoStack: state.undoStack,
-    redoStack: state.redoStack,
-    pushToUndoStack,
-    undo,
-    redo,
-    clearUndoRedoStack,
-    canUndo: state.undoStack.length > 0,
-    canRedo: state.redoStack.length > 0
+    saveToLocalStorage,
+    saveAs,
+    loadSavedFile,
+    getSavedFilesList,
+    importCSV,
+    importExcel,
+    exportCSV,
+    exportExcel
   };
 };
 
-export default useUndoRedo;
+export default useFileImportExport;
