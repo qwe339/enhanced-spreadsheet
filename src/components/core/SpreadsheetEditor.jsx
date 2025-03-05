@@ -24,6 +24,12 @@ import FormulaBar from './FormulaBar';
 import SheetTabs from './SheetTabs';
 import StatusBar from './StatusBar';
 
+// モーダルコンポーネント
+import Modal from '../modals/Modal';
+import OpenFileModal from '../modals/OpenFileModal';
+import SaveAsModal from '../modals/SaveAsModal';
+import CSVImportModal from '../modals/CSVImportModal';
+
 // ユーティリティ
 import { 
   numToLetter, 
@@ -247,6 +253,27 @@ useEffect(() => {
   }
 }, [currentSheet, currentSheetData, applyCurrentSheetStyles, applyConditionalFormatting, state.hyperformulaInstance]);
 
+// 初期データの読み込みを確認するuseEffectを追加
+useEffect(() => {
+  console.log('初期データのロード確認');
+  if (hotRef.current && hotRef.current.hotInstance) {
+    const hot = hotRef.current.hotInstance;
+    
+    // シートデータが空の場合に初期データをセット
+    if (!currentSheetData || currentSheetData.length === 0) {
+      console.log('初期データがないため、空のグリッドを生成します');
+      const emptyData = Array(50).fill().map(() => Array(26).fill(''));
+      hot.loadData(emptyData);
+    } else {
+      console.log('既存データをロードします', currentSheetData);
+      hot.loadData(currentSheetData);
+    }
+    
+    // 明示的に再描画
+    hot.render();
+  }
+}, []);
+
   // セル選択時のイベントハンドラー
   const handleAfterSelectionEnd = (row, column, row2, column2) => {
     // セルアドレスを更新（例: A1）
@@ -328,6 +355,36 @@ useEffect(() => {
     if (!changes || source === 'loadData') return;
     
     const hot = hotRef.current.hotInstance;
+
+// 明示的なレンダリングを行う関数
+const forceRenderGrid = useCallback(() => {
+  console.log('グリッドの強制レンダリングを実行');
+  if (hotRef.current && hotRef.current.hotInstance) {
+    const hot = hotRef.current.hotInstance;
+    
+    // 現在のデータを取得
+    const currentData = hot.getData() || Array(50).fill().map(() => Array(26).fill(''));
+    
+    // データを再設定して強制的に更新
+    setTimeout(() => {
+      hot.loadData(currentData);
+      hot.render();
+      console.log('グリッド再レンダリング完了');
+    }, 100);
+  }
+}, []);
+
+// コンポーネントマウント時に一度実行
+useEffect(() => {
+  console.log('コンポーネントがマウントされました');
+  forceRenderGrid();
+  
+  // ウィンドウリサイズ時にも再レンダリング
+  window.addEventListener('resize', forceRenderGrid);
+  return () => {
+    window.removeEventListener('resize', forceRenderGrid);
+  };
+}, [forceRenderGrid]);
     
     // 変更前の状態をアンドゥスタックに保存
     pushToUndoStack(hot);
@@ -340,15 +397,57 @@ useEffect(() => {
   };
 
   // 新規作成
-  const handleNewFile = () => {
+const handleNewFile = () => {
+  try {
+    console.log('handleNewFile を実行中...');
+    
     if (isModified) {
       if (window.confirm('変更が保存されていません。新しいファイルを作成しますか？')) {
+        console.log('変更があるため確認後、スプレッドシートをリセットします...');
+        
+        // スプレッドシートをリセット
         resetSpreadsheet();
+        
+        // Handsontableのデータも明示的にリセット
+        if (hotRef.current && hotRef.current.hotInstance) {
+          const emptyData = Array(50).fill().map(() => Array(26).fill(''));
+          hotRef.current.hotInstance.loadData(emptyData);
+          console.log('Handsontableのデータをリセットしました');
+        } else {
+          console.warn('Handsontableインスタンスが利用できないため、データをリセットできません');
+        }
+        
+        // 状態を更新
+        updateStatusMessage('新しいスプレッドシートを作成しました', 3000);
+        console.log('新規作成完了');
+      } else {
+        console.log('ユーザーがキャンセルしました');
       }
     } else {
+      console.log('変更なし、スプレッドシートをリセットします...');
+      
+      // スプレッドシートをリセット
       resetSpreadsheet();
+      
+      // Handsontableのデータも明示的にリセット
+      if (hotRef.current && hotRef.current.hotInstance) {
+        const emptyData = Array(50).fill().map(() => Array(26).fill(''));
+        hotRef.current.hotInstance.loadData(emptyData);
+        console.log('Handsontableのデータをリセットしました');
+      } else {
+        console.warn('Handsontableインスタンスが利用できないため、データをリセットできません');
+      }
+      
+      // 状態を更新
+      updateStatusMessage('新しいスプレッドシートを作成しました', 3000);
+      console.log('新規作成完了');
     }
-  };
+  } catch (error) {
+    console.error('新規作成エラー:', error);
+    updateStatusMessage('新規作成中にエラーが発生しました', 3000);
+    throw error; // 上位のエラーハンドラに伝播させる
+  }
+};
 
   // 保存
   const handleSave = () => {
@@ -356,75 +455,355 @@ useEffect(() => {
   };
 
   // メニュー項目のクリックハンドラー
-  const handleMenuItemClick = (itemId) => {
+const handleMenuItemClick = (itemId) => {
+  console.log(`メニュー項目 ${itemId} のクリックを処理します`);
+  
   switch (itemId) {
+    // ファイルメニュー
     case 'new':
       console.log('新規作成処理を実行中...');
-      handleNewFile();
-      console.log('新規作成処理完了');
+      try {
+        handleNewFile();
+        console.log('新規作成処理完了');
+      } catch (error) {
+        console.error('新規作成エラー:', error);
+        updateStatusMessage('新規作成中にエラーが発生しました', 3000);
+      }
       break;
+    
     case 'open':
       console.log('ファイルを開く処理を実行中...');
-      setShowModals(prev => {
-        console.log('モーダル状態を更新:', {...prev, openFile: true});
-        return {...prev, openFile: true};
-      });
+      try {
+        setShowModals(prev => ({...prev, openFile: true}));
+        console.log('ファイルを開くモーダルを表示しました');
+      } catch (error) {
+        console.error('モーダル表示エラー:', error);
+        updateStatusMessage('ファイルを開くダイアログの表示に失敗しました', 3000);
+      }
       break;
+    
     case 'save':
       console.log('保存処理を実行中...');
-      handleSave();
-      console.log('保存処理完了');
+      try {
+        handleSave();
+        console.log('保存処理完了');
+      } catch (error) {
+        console.error('保存エラー:', error);
+        updateStatusMessage('保存中にエラーが発生しました', 3000);
+      }
       break;
+      
     case 'saveAs':
       console.log('名前を付けて保存処理を実行中...');
-      setShowModals(prev => {
-        console.log('モーダル状態を更新:', {...prev, saveAs: true});
-        return {...prev, saveAs: true};
-      });
+      try {
+        setShowModals(prev => ({...prev, saveAs: true}));
+        console.log('名前を付けて保存モーダルを表示しました');
+      } catch (error) {
+        console.error('モーダル表示エラー:', error);
+        updateStatusMessage('名前を付けて保存ダイアログの表示に失敗しました', 3000);
+      }
       break;
+      
     case 'importCSV':
       console.log('CSVインポート処理を実行中...');
-      setShowModals(prev => {
-        console.log('モーダル状態を更新:', {...prev, csvImport: true});
-        return {...prev, csvImport: true};
-      });
+      try {
+        setShowModals(prev => ({...prev, csvImport: true}));
+        console.log('CSVインポートモーダルを表示しました');
+      } catch (error) {
+        console.error('モーダル表示エラー:', error);
+        updateStatusMessage('CSVインポートダイアログの表示に失敗しました', 3000);
+      }
       break;
+      
     case 'importExcel':
       console.log('Excelインポート処理を実行中...');
-      // ファイル選択ダイアログを表示
+      try {
+        // ファイル選択ダイアログを表示
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.xlsx,.xls';
+        input.onchange = (event) => {
+          const file = event.target.files[0];
+          if (file) {
+            try {
+              // Excel機能は実装中とメッセージ表示
+              updateStatusMessage('Excel機能は現在実装中です', 3000);
+            } catch (error) {
+              console.error('Excelインポートエラー:', error);
+              updateStatusMessage('Excelファイルのインポートに失敗しました', 3000);
+            }
+          }
+        };
+        input.click();
+        console.log('ファイル選択ダイアログを表示しました');
+      } catch (error) {
+        console.error('ファイル選択エラー:', error);
+        updateStatusMessage('ファイル選択ダイアログの表示に失敗しました', 3000);
+      }
       break;
+      
     case 'exportCSV':
       console.log('CSVエクスポート処理を実行中...');
-      exportCSV(hotRef.current?.hotInstance);
-      console.log('CSVエクスポート処理完了');
+      try {
+        if (hotRef.current && hotRef.current.hotInstance) {
+          exportCSV(hotRef.current.hotInstance);
+          console.log('CSVエクスポート処理完了');
+        } else {
+          throw new Error('Handsontableインスタンスが利用できません');
+        }
+      } catch (error) {
+        console.error('CSVエクスポートエラー:', error);
+        updateStatusMessage('CSVエクスポート中にエラーが発生しました', 3000);
+      }
       break;
+      
     case 'exportExcel':
       console.log('Excelエクスポート処理を実行中...');
-      exportExcel(hotRef.current?.hotInstance);
-      console.log('Excelエクスポート処理完了');
+      try {
+        if (hotRef.current && hotRef.current.hotInstance) {
+          exportExcel(hotRef.current.hotInstance);
+          console.log('Excelエクスポート処理完了');
+        } else {
+          throw new Error('Handsontableインスタンスが利用できません');
+        }
+      } catch (error) {
+        console.error('Excelエクスポートエラー:', error);
+        updateStatusMessage('Excelエクスポート中にエラーが発生しました', 3000);
+      }
       break;
-    // その他のケースも同様にデバッグログを追加
+      
+    case 'print':
+      console.log('印刷処理を実行中...');
+      try {
+        setShowModals(prev => ({...prev, printPreview: true}));
+        console.log('印刷プレビューモーダルを表示しました');
+      } catch (error) {
+        console.error('印刷プレビューエラー:', error);
+        updateStatusMessage('印刷プレビューの表示に失敗しました', 3000);
+      }
+      break;
+      
+    // 編集メニュー
+    case 'undo':
+      console.log('元に戻す処理を実行中...');
+      try {
+        if (hotRef.current && hotRef.current.hotInstance) {
+          undo(hotRef.current.hotInstance);
+          console.log('元に戻す処理完了');
+        } else {
+          throw new Error('Handsontableインスタンスが利用できません');
+        }
+      } catch (error) {
+        console.error('元に戻すエラー:', error);
+        updateStatusMessage('元に戻す操作に失敗しました', 3000);
+      }
+      break;
+      
+    case 'redo':
+      console.log('やり直し処理を実行中...');
+      try {
+        if (hotRef.current && hotRef.current.hotInstance) {
+          redo(hotRef.current.hotInstance);
+          console.log('やり直し処理完了');
+        } else {
+          throw new Error('Handsontableインスタンスが利用できません');
+        }
+      } catch (error) {
+        console.error('やり直しエラー:', error);
+        updateStatusMessage('やり直し操作に失敗しました', 3000);
+      }
+      break;
+      
+    case 'cut':
+      console.log('切り取り処理を実行中...');
+      try {
+        document.execCommand('cut');
+        console.log('切り取り処理完了');
+      } catch (error) {
+        console.error('切り取りエラー:', error);
+        updateStatusMessage('切り取り操作に失敗しました', 3000);
+      }
+      break;
+      
+    case 'copy':
+      console.log('コピー処理を実行中...');
+      try {
+        document.execCommand('copy');
+        console.log('コピー処理完了');
+      } catch (error) {
+        console.error('コピーエラー:', error);
+        updateStatusMessage('コピー操作に失敗しました', 3000);
+      }
+      break;
+      
+    case 'paste':
+      console.log('貼り付け処理を実行中...');
+      try {
+        document.execCommand('paste');
+        console.log('貼り付け処理完了');
+      } catch (error) {
+        console.error('貼り付けエラー:', error);
+        updateStatusMessage('貼り付け操作に失敗しました。ブラウザの権限設定を確認してください。', 3000);
+      }
+      break;
+      
+    case 'search':
+      console.log('検索と置換処理を実行中...');
+      try {
+        setShowModals(prev => ({...prev, search: true}));
+        console.log('検索と置換モーダルを表示しました');
+      } catch (error) {
+        console.error('検索モーダル表示エラー:', error);
+        updateStatusMessage('検索ダイアログの表示に失敗しました', 3000);
+      }
+      break;
+      
+    // 書式メニュー
+    case 'formatCell':
+      console.log('セルの書式処理を実行中...');
+      try {
+        setShowModals(prev => ({...prev, formatCell: true}));
+        console.log('セルの書式モーダルを表示しました');
+      } catch (error) {
+        console.error('書式モーダル表示エラー:', error);
+        updateStatusMessage('書式設定ダイアログの表示に失敗しました', 3000);
+      }
+      break;
+      
+    case 'bold':
+      console.log('太字処理を実行中...');
+      try {
+        if (hotRef.current && hotRef.current.hotInstance) {
+          applyStyleToSelection(hotRef.current.hotInstance, { fontWeight: 'bold' });
+          console.log('太字処理完了');
+        } else {
+          throw new Error('Handsontableインスタンスが利用できません');
+        }
+      } catch (error) {
+        console.error('太字適用エラー:', error);
+        updateStatusMessage('太字の適用に失敗しました', 3000);
+      }
+      break;
+      
+    case 'italic':
+      console.log('斜体処理を実行中...');
+      try {
+        if (hotRef.current && hotRef.current.hotInstance) {
+          applyStyleToSelection(hotRef.current.hotInstance, { fontStyle: 'italic' });
+          console.log('斜体処理完了');
+        } else {
+          throw new Error('Handsontableインスタンスが利用できません');
+        }
+      } catch (error) {
+        console.error('斜体適用エラー:', error);
+        updateStatusMessage('斜体の適用に失敗しました', 3000);
+      }
+      break;
+      
+    case 'underline':
+      console.log('下線処理を実行中...');
+      try {
+        if (hotRef.current && hotRef.current.hotInstance) {
+          applyStyleToSelection(hotRef.current.hotInstance, { textDecoration: 'underline' });
+          console.log('下線処理完了');
+        } else {
+          throw new Error('Handsontableインスタンスが利用できません');
+        }
+      } catch (error) {
+        console.error('下線適用エラー:', error);
+        updateStatusMessage('下線の適用に失敗しました', 3000);
+      }
+      break;
+      
+    case 'alignLeft':
+      console.log('左揃え処理を実行中...');
+      try {
+        if (hotRef.current && hotRef.current.hotInstance) {
+          applyStyleToSelection(hotRef.current.hotInstance, { textAlign: 'left' });
+          console.log('左揃え処理完了');
+        } else {
+          throw new Error('Handsontableインスタンスが利用できません');
+        }
+      } catch (error) {
+        console.error('左揃え適用エラー:', error);
+        updateStatusMessage('左揃えの適用に失敗しました', 3000);
+      }
+      break;
+      
+    case 'alignCenter':
+      console.log('中央揃え処理を実行中...');
+      try {
+        if (hotRef.current && hotRef.current.hotInstance) {
+          applyStyleToSelection(hotRef.current.hotInstance, { textAlign: 'center' });
+          console.log('中央揃え処理完了');
+        } else {
+          throw new Error('Handsontableインスタンスが利用できません');
+        }
+      } catch (error) {
+        console.error('中央揃え適用エラー:', error);
+        updateStatusMessage('中央揃えの適用に失敗しました', 3000);
+      }
+      break;
+      
+    case 'alignRight':
+      console.log('右揃え処理を実行中...');
+      try {
+        if (hotRef.current && hotRef.current.hotInstance) {
+          applyStyleToSelection(hotRef.current.hotInstance, { textAlign: 'right' });
+          console.log('右揃え処理完了');
+        } else {
+          throw new Error('Handsontableインスタンスが利用できません');
+        }
+      } catch (error) {
+        console.error('右揃え適用エラー:', error);
+        updateStatusMessage('右揃えの適用に失敗しました', 3000);
+      }
+      break;
+      
+    // ヘルプメニュー
+    case 'about':
+      console.log('バージョン情報処理を実行中...');
+      try {
+        setShowModals(prev => ({...prev, about: true}));
+        console.log('バージョン情報モーダルを表示しました');
+      } catch (error) {
+        console.error('バージョン情報モーダル表示エラー:', error);
+        updateStatusMessage('バージョン情報の表示に失敗しました', 3000);
+      }
+      break;
+      
+    case 'shortcuts':
+      console.log('キーボードショートカット処理を実行中...');
+      try {
+        setShowModals(prev => ({...prev, shortcuts: true}));
+        console.log('キーボードショートカットモーダルを表示しました');
+      } catch (error) {
+        console.error('ショートカットモーダル表示エラー:', error);
+        updateStatusMessage('ショートカット一覧の表示に失敗しました', 3000);
+      }
+      break;
+      
     default:
       console.log('未処理のメニュー項目:', itemId);
+      updateStatusMessage(`未実装の機能: ${itemId}`, 3000);
       break;
   }
 };
 
   // Handsontableの設定
 const hotSettings = {
-  data: currentSheetData,
+  data: currentSheetData || Array(50).fill().map(() => Array(26).fill('')),
   rowHeaders: true,
-  colHeaders: true,
-  licenseKey: 'non-commercial-and-evaluation', // この値は問題ないようです
+  colHeaders: (index) => numToLetter(index), // アルファベットの列ヘッダー
+  licenseKey: 'non-commercial-and-evaluation',
   contextMenu: true,
   manualColumnResize: true,
   manualRowResize: true,
   comments: true,
-  // HyperFormula連携（条件付き）- sheetNameが存在するか確認
   ...(state.hyperformulaInstance ? {
     formulas: {
       engine: state.hyperformulaInstance,
-      sheetName: 'sheet1' // 明示的にsheet1を指定
+      sheetName: currentSheet
     }
   } : {}),
   stretchH: 'all',
@@ -435,16 +814,16 @@ const hotSettings = {
   fixedColumnsLeft: 0,
   minSpareRows: 5,
   minSpareCols: 2,
-  // イベントハンドラー
   afterSelectionEnd: handleAfterSelectionEnd,
   afterChange: handleAfterChange,
-  // セルレンダラー（簡易版）
   cells: function(row, col, prop) {
-    const cellProperties = {};
-    return cellProperties;
+    return {};
   },
   className: 'htCustomStyles',
-  outsideClickDeselects: false
+  outsideClickDeselects: false,
+  renderAllRows: true,
+  viewportColumnRenderingOffset: 100,
+  viewportRowRenderingOffset: 100
 };
 
   return (
@@ -466,7 +845,10 @@ const hotSettings = {
       </div>
       
       {/* メニューバー */}
-      <MenuBar onMenuItemClick={handleMenuItemClick} />
+<MenuBar 
+  onMenuItemClick={handleMenuItemClick} 
+  // menuItemsプロパティは削除
+/>
       
       {/* ツールバー */}
       <Toolbar 
@@ -514,9 +896,132 @@ const hotSettings = {
         stats={selectionStats}
       />
       
-      {/* モーダルの実装はここに追加 */}
-    </div>
-  );
+          {/* モーダルの実装はここに追加 */}
+    {showModals.openFile && (
+      <OpenFileModal 
+        onClose={() => setShowModals(prev => ({...prev, openFile: false}))}
+        onFileOpen={loadSavedFile}
+        savedFiles={getSavedFilesList()}
+      />
+    )}
+
+    {showModals.saveAs && (
+      <SaveAsModal 
+        onClose={() => setShowModals(prev => ({...prev, saveAs: false}))}
+        onSave={saveAs}
+        currentFilename={currentFilename}
+      />
+    )}
+
+    {showModals.csvImport && (
+      <CSVImportModal 
+        onClose={() => setShowModals(prev => ({...prev, csvImport: false}))}
+        onImport={importCSV}
+      />
+    )}
+
+    {showModals.about && (
+      <Modal title="バージョン情報" onClose={() => setShowModals(prev => ({...prev, about: false}))}>
+        <div className="modal-body">
+          <p>拡張スプレッドシート バージョン 0.1.0</p>
+          <p>このアプリケーションは高度なスプレッドシート機能を提供します。</p>
+          <p>© 2025 拡張スプレッドシート開発チーム</p>
+        </div>
+        <div className="modal-footer">
+          <button className="primary" onClick={() => setShowModals(prev => ({...prev, about: false}))}>閉じる</button>
+        </div>
+      </Modal>
+    )}
+
+    {showModals.shortcuts && (
+      <Modal title="キーボードショートカット" onClose={() => setShowModals(prev => ({...prev, shortcuts: false}))}>
+        <div className="modal-body">
+          <table className="shortcuts-table">
+            <thead>
+              <tr>
+                <th>ショートカット</th>
+                <th>機能</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Ctrl+N</td>
+                <td>新規作成</td>
+              </tr>
+              <tr>
+                <td>Ctrl+S</td>
+                <td>保存</td>
+              </tr>
+              <tr>
+                <td>Ctrl+Z</td>
+                <td>元に戻す</td>
+              </tr>
+              <tr>
+                <td>Ctrl+Y</td>
+                <td>やり直し</td>
+              </tr>
+              <tr>
+                <td>Ctrl+B</td>
+                <td>太字</td>
+              </tr>
+              <tr>
+                <td>Ctrl+I</td>
+                <td>斜体</td>
+              </tr>
+              <tr>
+                <td>Ctrl+U</td>
+                <td>下線</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div className="modal-footer">
+          <button className="primary" onClick={() => setShowModals(prev => ({...prev, shortcuts: false}))}>閉じる</button>
+        </div>
+      </Modal>
+    )}
+
+// Handsontableのデバッグ
+useEffect(() => {
+  console.log('Handsontableインスタンスの確認');
+  if (hotRef.current) {
+    console.log('hotRef.current:', hotRef.current);
+    if (hotRef.current.hotInstance) {
+      console.log('hotInstance が存在します');
+      console.log('現在のデータ:', hotRef.current.hotInstance.getData());
+    } else {
+      console.warn('hotInstance が存在しません');
+    }
+  } else {
+    console.warn('hotRef.current が存在しません');
+  }
+}, []);
+
+// コンポーネントマウント時に一度だけ実行
+useEffect(() => {
+  console.log('コンポーネントマウント時の初期化チェック');
+  if (hotRef.current && hotRef.current.hotInstance) {
+    console.log('Handsontableインスタンスが存在します');
+    const hot = hotRef.current.hotInstance;
+    
+    // データが空の場合、空のグリッドを生成
+    const data = hot.getData();
+    if (!data || data.length === 0) {
+      const emptyData = Array(50).fill().map(() => Array(26).fill(''));
+      hot.loadData(emptyData);
+      console.log('空のデータグリッドを生成しました');
+    }
+    
+    // 明示的に再描画
+    hot.render();
+  } else {
+    console.warn('Handsontableインスタンスがまだ存在しません');
+  }
+}, []); // 空の依存配列で一度だけ実行
+
+    {/* 必要に応じて他のモーダルも追加 */}
+  </div>
+);
 };
 
 export default SpreadsheetEditor;

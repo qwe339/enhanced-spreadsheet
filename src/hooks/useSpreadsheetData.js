@@ -160,9 +160,46 @@ const useSpreadsheetData = () => {
   /**
    * スプレッドシートをリセットする
    */
-  const resetSpreadsheet = useCallback(() => {
-    dispatch({ type: actionTypes.RESET_SPREADSHEET });
-  }, [dispatch, actionTypes]);
+const resetSpreadsheet = useCallback(() => {
+  console.log('resetSpreadsheet実行: スプレッドシートの状態をリセットします');
+  
+  // 明示的に初期状態を設定
+  const initialState = {
+    sheets: ['sheet1'],
+    sheetData: { 'sheet1': Array(50).fill().map(() => Array(26).fill('')) },
+    cellStyles: {},
+    conditionalFormats: {},
+    charts: [],
+    comments: {},
+    protectedCells: {},
+    dataValidations: {},
+    currentSheet: 'sheet1',
+    currentFilename: '新しいスプレッドシート',
+    lastSaved: null,
+    isModified: false
+  };
+  
+  dispatch({ 
+    type: actionTypes.RESET_SPREADSHEET,
+    payload: initialState  // ペイロードを明示的に渡す
+  });
+  
+  console.log('スプレッドシートのリセット完了');
+  
+  // リセット後に状態を更新
+  setSelectedCell(null);
+  setSelectionRange(null);
+  setCellAddress('');
+  setFormulaValue('');
+  updateStatusMessage('新しいスプレッドシートを作成しました', 3000);
+  
+  return true; // 成功を示す値を返す
+}, [
+  dispatch, actionTypes, 
+  setSelectedCell, setSelectionRange, 
+  setCellAddress, setFormulaValue, 
+  updateStatusMessage
+]);
   
   /**
    * 変更フラグを設定する

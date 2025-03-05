@@ -70,10 +70,11 @@ const MenuBar = ({ onMenuItemClick }) => {
     }
   };
 
-  const handleMenuItemClick = (itemId) => {
-  console.log('Menu item clicked:', itemId); // デバッグログを追加
+const handleMenuItemClick = (itemId) => {
+  console.log('Menu item clicked:', itemId);
   setActiveMenu(null);
-  if (onMenuItemClick) {
+  // onMenuItemClickが関数であることを確認
+  if (typeof onMenuItemClick === 'function') {
     console.log('Calling parent handler for:', itemId);
     onMenuItemClick(itemId);
   } else {

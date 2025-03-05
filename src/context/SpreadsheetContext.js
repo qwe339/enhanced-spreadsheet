@@ -279,11 +279,32 @@ function spreadsheetReducer(state, action) {
         redoStack: []
       };
       
-    case actionTypes.RESET_SPREADSHEET:
-      return {
-        ...initialState,
-        hyperformulaInstance: state.hyperformulaInstance
-      };
+case actionTypes.RESET_SPREADSHEET:
+  console.log('RESET_SPREADSHEET アクションを処理します');
+  
+  // ペイロードが存在する場合はそれを使用し、そうでなければ初期状態を使用
+  const resetState = action.payload || {
+    sheets: ['sheet1'],
+    sheetData: { 'sheet1': Array(50).fill().map(() => Array(26).fill('')) },
+    cellStyles: {},
+    conditionalFormats: {},
+    charts: [],
+    comments: {},
+    protectedCells: {},
+    dataValidations: {},
+    currentSheet: 'sheet1',
+    currentFilename: '新しいスプレッドシート',
+    lastSaved: null,
+    isModified: false
+  };
+  
+  return {
+    ...initialState,
+    ...resetState,
+    hyperformulaInstance: state.hyperformulaInstance, // HyperFormulaインスタンスは保持
+    undoStack: [], // 履歴はクリア
+    redoStack: []
+  };
       
     case actionTypes.SET_MODIFIED:
       return { ...state, isModified: action.payload };

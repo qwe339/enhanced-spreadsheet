@@ -42,6 +42,13 @@
   overflow: hidden;
   background-color: white;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  min-height: 400px; /* 最小高さを設定 */
+  display: flex;
+}
+
+.spreadsheet-wrapper .handsontable {
+  width: 100% !important;
+  height: 100% !important;
 }
 
 /* 数式バー */
