@@ -71,11 +71,15 @@ const MenuBar = ({ onMenuItemClick }) => {
   };
 
   const handleMenuItemClick = (itemId) => {
-    setActiveMenu(null);
-    if (onMenuItemClick) {
-      onMenuItemClick(itemId);
-    }
-  };
+  console.log('Menu item clicked:', itemId); // デバッグログを追加
+  setActiveMenu(null);
+  if (onMenuItemClick) {
+    console.log('Calling parent handler for:', itemId);
+    onMenuItemClick(itemId);
+  } else {
+    console.warn('No menu item click handler provided');
+  }
+};
 
   // メニュー外をクリックした時にメニューを閉じる
   const handleOutsideClick = () => {

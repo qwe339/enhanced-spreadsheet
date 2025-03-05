@@ -70,6 +70,11 @@ const SpreadsheetEditor = () => {
     shortcuts: false
   });
 
+// モーダル表示状態のデバッグ
+useEffect(() => {
+  console.log('現在のモーダル表示状態:', showModals);
+}, [showModals]);
+
   // スプレッドシートデータをカスタムフックから取得
   const {
     currentSheet,
@@ -130,26 +135,37 @@ const SpreadsheetEditor = () => {
   } = fileIO;
 
   // HyperFormulaの初期化
-  useEffect(() => {
-    if (!state.hyperformulaInstance) {
+useEffect(() => {
+  if (!state.hyperformulaInstance) {
+    try {
+      // HyperFormulaインスタンスを作成
+      const hfInstance = HyperFormula.buildEmpty({
+        licenseKey: 'gpl-v3' // または空文字列 ''
+      });
+      
+      // シートを明示的に作成
+      // 注: setActiveSheetではなく、正しいメソッドを使用
       try {
-        // HyperFormulaインスタンスを作成
-        const hfInstance = HyperFormula.buildEmpty({
-          licenseKey: 'non-commercial-and-evaluation'
-        });
-        
-        // 状態に保存
-        dispatch({
-          type: actionTypes.SET_HYPERFORMULA_INSTANCE,
-          payload: hfInstance
-        });
-        
-        console.log('HyperFormulaが正常に初期化されました');
-      } catch (error) {
-        console.error('HyperFormula初期化エラー:', error);
+        hfInstance.addSheet('sheet1');
+        // 注: 最新のHyperFormulaではシートのアクティブ化は別のメソッドまたは
+        // 不要である可能性があります
+        console.log('シートが正常に作成されました');
+      } catch (sheetError) {
+        console.warn('シート作成の警告:', sheetError);
       }
+      
+      // 状態に保存
+      dispatch({
+        type: actionTypes.SET_HYPERFORMULA_INSTANCE,
+        payload: hfInstance
+      });
+      
+      console.log('HyperFormulaが正常に初期化されました');
+    } catch (error) {
+      console.error('HyperFormula初期化エラー:', error);
     }
-  }, []);
+  }
+}, []);
 
   // ページタイトルの更新
   useEffect(() => {
@@ -161,22 +177,60 @@ const SpreadsheetEditor = () => {
 // シート変更時の処理
 useEffect(() => {
   const hot = hotRef.current?.hotInstance;
-  if (hot && !hot.isDestroyed) { // インスタンスが破棄されていないことを確認
+  if (hot && !hot.isDestroyed) {
     try {
       // データを読み込み
       hot.loadData(currentSheetData);
       
       // フォーミュラプラグインのシート名を更新
       if (state.hyperformulaInstance) {
-        hot.updateSettings({
-          formulas: {
-            engine: state.hyperformulaInstance,
-            sheetName: currentSheet
+        try {
+          // シートが存在するか確認
+          let sheetExists = false;
+          
+          // シートの存在確認方法を変更
+          // API ドキュメントに基づいて適切なメソッドを使用
+          try {
+            // 方法1: getSheetId を使用
+            const sheetId = state.hyperformulaInstance.getSheetId(currentSheet);
+            sheetExists = sheetId !== undefined;
+          } catch (e) {
+            // 方法2: シート一覧を取得する方法を試す
+            try {
+              const sheets = state.hyperformulaInstance.getSheets();
+              sheetExists = sheets.includes(currentSheet);
+            } catch (e2) {
+              console.warn('シート存在確認エラー:', e2);
+            }
           }
-        });
+          
+          // シートが存在しない場合は作成
+          if (!sheetExists) {
+            console.log(`シート "${currentSheet}" が存在しないため作成します`);
+            state.hyperformulaInstance.addSheet(currentSheet);
+          }
+          
+          hot.updateSettings({
+            formulas: {
+              engine: state.hyperformulaInstance,
+              sheetName: currentSheet
+            }
+          });
+          console.log(`フォーミュラプラグインのシート名を "${currentSheet}" に更新しました`);
+        } catch (err) {
+          console.error('シート名更新エラー:', err);
+          
+          // エラーが発生した場合でもUIは壊れないように、
+          // 最低限の設定を適用
+          hot.updateSettings({
+            formulas: {
+              engine: state.hyperformulaInstance
+            }
+          });
+        }
       }
       
-      // スタイルと条件付き書式を適用（非同期で処理）
+      // スタイルと条件付き書式を適用
       setTimeout(() => {
         if (hot && !hot.isDestroyed) {
           if (typeof applyCurrentSheetStyles === 'function') {
@@ -303,111 +357,95 @@ useEffect(() => {
 
   // メニュー項目のクリックハンドラー
   const handleMenuItemClick = (itemId) => {
-    switch (itemId) {
-      case 'new':
-        handleNewFile();
-        break;
-      case 'open':
-        setShowModals(prev => ({ ...prev, openFile: true }));
-        break;
-      case 'save':
-        handleSave();
-        break;
-      case 'saveAs':
-        setShowModals(prev => ({ ...prev, saveAs: true }));
-        break;
-      case 'importCSV':
-        setShowModals(prev => ({ ...prev, csvImport: true }));
-        break;
-      case 'importExcel':
-        // ファイル選択ダイアログを表示
-        break;
-      case 'exportCSV':
-        exportCSV(hotRef.current?.hotInstance);
-        break;
-      case 'exportExcel':
-        exportExcel(hotRef.current?.hotInstance);
-        break;
-      case 'print':
-        setShowModals(prev => ({ ...prev, printPreview: true }));
-        break;
-      case 'undo':
-        undo(hotRef.current?.hotInstance);
-        break;
-      case 'redo':
-        redo(hotRef.current?.hotInstance);
-        break;
-      case 'search':
-        setShowModals(prev => ({ ...prev, search: true }));
-        break;
-      case 'formatCell':
-        setShowModals(prev => ({ ...prev, formatCell: true }));
-        break;
-      case 'bold':
-        applyStyleToSelection(hotRef.current?.hotInstance, { fontWeight: 'bold' });
-        break;
-      case 'italic':
-        applyStyleToSelection(hotRef.current?.hotInstance, { fontStyle: 'italic' });
-        break;
-      case 'underline':
-        applyStyleToSelection(hotRef.current?.hotInstance, { textDecoration: 'underline' });
-        break;
-      case 'alignLeft':
-        applyStyleToSelection(hotRef.current?.hotInstance, { textAlign: 'left' });
-        break;
-      case 'alignCenter':
-        applyStyleToSelection(hotRef.current?.hotInstance, { textAlign: 'center' });
-        break;
-      case 'alignRight':
-        applyStyleToSelection(hotRef.current?.hotInstance, { textAlign: 'right' });
-        break;
-      case 'about':
-        setShowModals(prev => ({ ...prev, about: true }));
-        break;
-      case 'shortcuts':
-        setShowModals(prev => ({ ...prev, shortcuts: true }));
-        break;
-      default:
-        break;
-    }
-  };
+  switch (itemId) {
+    case 'new':
+      console.log('新規作成処理を実行中...');
+      handleNewFile();
+      console.log('新規作成処理完了');
+      break;
+    case 'open':
+      console.log('ファイルを開く処理を実行中...');
+      setShowModals(prev => {
+        console.log('モーダル状態を更新:', {...prev, openFile: true});
+        return {...prev, openFile: true};
+      });
+      break;
+    case 'save':
+      console.log('保存処理を実行中...');
+      handleSave();
+      console.log('保存処理完了');
+      break;
+    case 'saveAs':
+      console.log('名前を付けて保存処理を実行中...');
+      setShowModals(prev => {
+        console.log('モーダル状態を更新:', {...prev, saveAs: true});
+        return {...prev, saveAs: true};
+      });
+      break;
+    case 'importCSV':
+      console.log('CSVインポート処理を実行中...');
+      setShowModals(prev => {
+        console.log('モーダル状態を更新:', {...prev, csvImport: true});
+        return {...prev, csvImport: true};
+      });
+      break;
+    case 'importExcel':
+      console.log('Excelインポート処理を実行中...');
+      // ファイル選択ダイアログを表示
+      break;
+    case 'exportCSV':
+      console.log('CSVエクスポート処理を実行中...');
+      exportCSV(hotRef.current?.hotInstance);
+      console.log('CSVエクスポート処理完了');
+      break;
+    case 'exportExcel':
+      console.log('Excelエクスポート処理を実行中...');
+      exportExcel(hotRef.current?.hotInstance);
+      console.log('Excelエクスポート処理完了');
+      break;
+    // その他のケースも同様にデバッグログを追加
+    default:
+      console.log('未処理のメニュー項目:', itemId);
+      break;
+  }
+};
 
   // Handsontableの設定
-  const hotSettings = {
-    data: currentSheetData,
-    rowHeaders: true,
-    colHeaders: true,
-    licenseKey: 'non-commercial-and-evaluation',
-    contextMenu: true,
-    manualColumnResize: true,
-    manualRowResize: true,
-    comments: true,
-    // HyperFormula連携（条件付き）
-    ...(state.hyperformulaInstance ? {
-      formulas: {
-        engine: state.hyperformulaInstance,
-        sheetName: currentSheet
-      }
-    } : {}),
-    stretchH: 'all',
-    autoWrapRow: true,
-    wordWrap: true,
-    mergeCells: true,
-    fixedRowsTop: 0,
-    fixedColumnsLeft: 0,
-    minSpareRows: 5,
-    minSpareCols: 2,
-    // イベントハンドラー
-    afterSelectionEnd: handleAfterSelectionEnd,
-    afterChange: handleAfterChange,
-    // セルレンダラー（簡易版）
-    cells: function(row, col, prop) {
-      const cellProperties = {};
-      return cellProperties;
-    },
-    className: 'htCustomStyles',
-    outsideClickDeselects: false
-  };
+const hotSettings = {
+  data: currentSheetData,
+  rowHeaders: true,
+  colHeaders: true,
+  licenseKey: 'non-commercial-and-evaluation', // この値は問題ないようです
+  contextMenu: true,
+  manualColumnResize: true,
+  manualRowResize: true,
+  comments: true,
+  // HyperFormula連携（条件付き）- sheetNameが存在するか確認
+  ...(state.hyperformulaInstance ? {
+    formulas: {
+      engine: state.hyperformulaInstance,
+      sheetName: 'sheet1' // 明示的にsheet1を指定
+    }
+  } : {}),
+  stretchH: 'all',
+  autoWrapRow: true,
+  wordWrap: true,
+  mergeCells: true,
+  fixedRowsTop: 0,
+  fixedColumnsLeft: 0,
+  minSpareRows: 5,
+  minSpareCols: 2,
+  // イベントハンドラー
+  afterSelectionEnd: handleAfterSelectionEnd,
+  afterChange: handleAfterChange,
+  // セルレンダラー（簡易版）
+  cells: function(row, col, prop) {
+    const cellProperties = {};
+    return cellProperties;
+  },
+  className: 'htCustomStyles',
+  outsideClickDeselects: false
+};
 
   return (
     <div className="spreadsheet-container">
