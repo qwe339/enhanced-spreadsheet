@@ -62,6 +62,7 @@ const SpreadsheetEditor = () => {
   
   // UI状態
   const [isFormulaEditing, setIsFormulaEditing] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [showModals, setShowModals] = useState({
     about: false,
     chart: false,
@@ -135,23 +136,49 @@ const SpreadsheetEditor = () => {
     exportExcel
   } = fileIO;
 
+  // セルを編集モードにする関数
+  const enterEditMode = useCallback((row, col) => {
+    console.log(`セル(${row}, ${col})の編集モードを開始`);
+    const hot = hotRef.current?.hotInstance;
+    if (hot && !hot.isDestroyed) {
+      try {
+        hot.selectCell(row, col);
+        setTimeout(() => {
+          if (hot.getActiveEditor()) {
+            hot.getActiveEditor().beginEditing();
+            setIsEditMode(true);
+          }
+        }, 50);
+      } catch (error) {
+        console.error('編集モード開始エラー:', error);
+      }
+    }
+  }, []);
+
   // モーダル表示状態のデバッグ
   useEffect(() => {
     console.log('現在のモーダル表示状態:', showModals);
   }, [showModals]);
 
-  // HyperFormulaの初期化
+  // HyperFormulaの初期化と設定
   useEffect(() => {
     if (!state.hyperformulaInstance) {
       try {
         // HyperFormulaインスタンスを作成
         const hfInstance = HyperFormula.buildEmpty({
-          licenseKey: 'gpl-v3' // または空文字列 ''
+          licenseKey: 'gpl-v3',
+          maxColumns: 100,
+          maxRows: 1000
         });
         
         // シートを明示的に作成
         try {
-          hfInstance.addSheet('sheet1');
+          // 既存のシートをすべて登録
+          state.sheets.forEach(sheetId => {
+            if (!hfInstance.doesSheetExist(sheetId)) {
+              hfInstance.addSheet(sheetId);
+            }
+          });
           console.log('シートが正常に作成されました');
         } catch (sheetError) {
           console.warn('シート作成の警告:', sheetError);
@@ -168,7 +195,7 @@ const SpreadsheetEditor = () => {
         console.error('HyperFormula初期化エラー:', error);
       }
     }
-  }, [state.hyperformulaInstance, dispatch, actionTypes]);
+  }, [state.hyperformulaInstance, state.sheets, dispatch, actionTypes]);
 
   // ページタイトルの更新
   useEffect(() => {
@@ -191,18 +218,17 @@ const SpreadsheetEditor = () => {
             // シートが存在するか確認
             let sheetExists = false;
             
-            // シートの存在確認方法を変更
             try {
-              // 方法1: getSheetId を使用
-              const sheetId = state.hyperformulaInstance.getSheetId(currentSheet);
-              sheetExists = sheetId !== undefined;
+              sheetExists = state.hyperformulaInstance.doesSheetExist(currentSheet);
             } catch (e) {
-              // 方法2: シート一覧を取得する方法を試す
+              console.warn('シート存在確認エラー:', e);
+              
+              // 代替方法を試す
               try {
-                const sheets = state.hyperformulaInstance.getSheets();
-                sheetExists = sheets.includes(currentSheet);
+                const sheetId = state.hyperformulaInstance.getSheetId(currentSheet);
+                sheetExists = sheetId !== undefined;
               } catch (e2) {
-                console.warn('シート存在確認エラー:', e2);
+                console.warn('シートID取得エラー:', e2);
               }
             }
             
@@ -242,101 +268,73 @@ const SpreadsheetEditor = () => {
               applyConditionalFormatting(hot);
             }
           }
-        }, 0);
+        }, 50);
       } catch (error) {
         console.error('Handsontable更新エラー:', error);
       }
     }
   }, [currentSheet, currentSheetData, applyCurrentSheetStyles, applyConditionalFormatting, state.hyperformulaInstance]);
 
-  // 明示的なレンダリングを行う関数
+  // レンダリングを最適化
   const forceRenderGrid = useCallback(() => {
-    console.log('グリッドの強制レンダリングを実行');
+    console.log('グリッドの再レンダリングを実行');
     if (hotRef.current && hotRef.current.hotInstance) {
       const hot = hotRef.current.hotInstance;
-      
-      // 現在のデータを取得
-      const currentData = hot.getData() || Array(50).fill().map(() => Array(26).fill(''));
-      
-      // データを再設定して強制的に更新
-      setTimeout(() => {
-        hot.loadData(currentData);
-        hot.render();
-        console.log('グリッド再レンダリング完了');
-      }, 100);
+      hot.render();
     }
   }, []);
 
-  // コンポーネントマウント時とリサイズ時に再レンダリング
+  // キーボードイベントの設定
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // F2キーで編集モードに入る
+      if (e.key === 'F2') {
+        const hot = hotRef.current?.hotInstance;
+        if (hot && !hot.isDestroyed) {
+          const selected = hot.getSelected();
+          if (selected && selected.length > 0) {
+            const [row, col] = selected[0];
+            enterEditMode(row, col);
+            e.preventDefault();
+          }
+        }
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [enterEditMode]);
+
+  // コンポーネントマウント時とリサイズ時の処理
   useEffect(() => {
     console.log('コンポーネントがマウントされました');
-    forceRenderGrid();
     
-    // ウィンドウリサイズ時にも再レンダリング
-    window.addEventListener('resize', forceRenderGrid);
-    return () => {
-      window.removeEventListener('resize', forceRenderGrid);
+    // ウィンドウリサイズ時に再レンダリング
+    const handleResize = () => {
+      if (hotRef.current && hotRef.current.hotInstance) {
+        hotRef.current.hotInstance.render();
+      }
     };
-  }, [forceRenderGrid]);
-
-  // 初期データの読み込みを確認するuseEffect
-  useEffect(() => {
-    console.log('初期データのロード確認');
+    
+    window.addEventListener('resize', handleResize);
+    
+    // コンポーネントマウント時に空のデータを用意
     if (hotRef.current && hotRef.current.hotInstance) {
-      const hot = hotRef.current.hotInstance;
-      
-      // シートデータが空の場合に初期データをセット
       if (!currentSheetData || currentSheetData.length === 0) {
-        console.log('初期データがないため、空のグリッドを生成します');
         const emptyData = Array(50).fill().map(() => Array(26).fill(''));
-        hot.loadData(emptyData);
-      } else {
-        console.log('既存データをロードします', currentSheetData);
-        hot.loadData(currentSheetData);
+        hotRef.current.hotInstance.loadData(emptyData);
       }
       
       // 明示的に再描画
-      hot.render();
+      forceRenderGrid();
     }
-  }, [currentSheetData]);
-
-  // Handsontableのデバッグ
-  useEffect(() => {
-    console.log('Handsontableインスタンスの確認');
-    if (hotRef.current) {
-      console.log('hotRef.current:', hotRef.current);
-      if (hotRef.current.hotInstance) {
-        console.log('hotInstance が存在します');
-        console.log('現在のデータ:', hotRef.current.hotInstance.getData());
-      } else {
-        console.warn('hotInstance が存在しません');
-      }
-    } else {
-      console.warn('hotRef.current が存在しません');
-    }
-  }, []);
-
-  // コンポーネントマウント時に初期化チェック
-  useEffect(() => {
-    console.log('コンポーネントマウント時の初期化チェック');
-    if (hotRef.current && hotRef.current.hotInstance) {
-      console.log('Handsontableインスタンスが存在します');
-      const hot = hotRef.current.hotInstance;
-      
-      // データが空の場合、空のグリッドを生成
-      const data = hot.getData();
-      if (!data || data.length === 0) {
-        const emptyData = Array(50).fill().map(() => Array(26).fill(''));
-        hot.loadData(emptyData);
-        console.log('空のデータグリッドを生成しました');
-      }
-      
-      // 明示的に再描画
-      hot.render();
-    } else {
-      console.warn('Handsontableインスタンスがまだ存在しません');
-    }
-  }, []); // 空の依存配列で一度だけ実行
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [forceRenderGrid, currentSheetData]);
 
   // セル選択時のイベントハンドラー
   const handleAfterSelectionEnd = (row, column, row2, column2) => {
@@ -356,6 +354,26 @@ const SpreadsheetEditor = () => {
     // 選択範囲の統計を計算
     updateCellSelectionStats(row, column, row2, column2);
   };
+
+  // ダブルクリックでセル編集を開始
+const handleCellMouseDown = useCallback((event, coords) => {
+  console.log('セルのマウスダウンイベント:', coords);
+  // 単純なクリックでセルを選択
+  const hot = hotRef.current?.hotInstance;
+  if (hot && !hot.isDestroyed) {
+    hot.selectCell(coords.row, coords.col);
+    
+    // ダブルクリックで編集モード
+    if (event.detail === 2) {
+      setTimeout(() => {
+        if (hot.getActiveEditor()) {
+          hot.getActiveEditor().beginEditing();
+          setIsEditMode(true);
+        }
+      }, 10);
+    }
+  }
+}, []);
 
   // 選択範囲の統計情報を更新
   const updateCellSelectionStats = (row, col, row2, col2) => {
@@ -430,6 +448,60 @@ const SpreadsheetEditor = () => {
     setModified(true);
   };
 
+  // セル編集の開始/終了イベントハンドラー
+  const handleBeforeKeyDown = (event) => {
+  // Enterキーの処理をカスタマイズ
+  if (event.keyCode === 13) { // Enterキー
+    const hot = hotRef.current.hotInstance;
+    const selected = hot.getSelected();
+    
+    if (selected && selected.length > 0) {
+      const [row, col, row2, col2] = selected[0];
+      
+      if (isEditMode) {
+        // 現在の編集を確定
+        const editor = hot.getActiveEditor();
+        if (editor) {
+          // 編集内容を保存して確定
+          const value = editor.getValue();
+          hot.destroyEditor(true); // 変更を保存
+          setIsEditMode(false);
+          
+          // 変更を明示的に適用
+          setTimeout(() => {
+            console.log('編集を確定:', value, row, col);
+            hot.setDataAtCell(row, col, value);
+            
+            // 次のセルに移動
+            hot.selectCell(row + 1, col);
+          }, 10);
+        }
+        
+        event.stopImmediatePropagation(); // デフォルトの動作を停止
+        event.preventDefault();
+        return false;
+      } else {
+        // 編集モードでなければ、編集モードに入る
+        enterEditMode(row, col);
+        
+        event.stopImmediatePropagation();
+        event.preventDefault();
+        return false;
+      }
+    }
+  }
+};
+
+  // 編集開始のハンドラー
+  const handleAfterBeginEditing = () => {
+    setIsEditMode(true);
+  };
+
+  // 編集終了のハンドラー
+  const handleAfterFinishEditing = () => {
+    setIsEditMode(false);
+  };
+
   // 新規作成
   const handleNewFile = () => {
     try {
@@ -488,61 +560,61 @@ const SpreadsheetEditor = () => {
     saveToLocalStorage();
   };
 
-// メニュー項目のクリックハンドラー
-const handleMenuItemClick = (itemId) => {
-  console.log(`メニュー項目 ${itemId} のクリックを処理します`);
-  
-  // まず、モーダルの表示状態を管理（必要に応じて特定のモーダルだけを開く）
-  setShowModals(prev => {
-    // 現在開いているモーダルをすべて閉じるための新しいオブジェクト
-    const updatedModals = {};
-    Object.keys(prev).forEach(key => {
-      updatedModals[key] = false;
+  // メニュー項目のクリックハンドラー
+  const handleMenuItemClick = (itemId) => {
+    console.log(`メニュー項目 ${itemId} のクリックを処理します`);
+    
+    // まず、モーダルの表示状態を管理（必要に応じて特定のモーダルだけを開く）
+    setShowModals(prev => {
+      // 現在開いているモーダルをすべて閉じるための新しいオブジェクト
+      const updatedModals = {};
+      Object.keys(prev).forEach(key => {
+        updatedModals[key] = false;
+      });
+      
+      // itemIdに応じて特定のモーダルだけを開く
+      switch (itemId) {
+        case 'open':
+          updatedModals.openFile = true;
+          break;
+        case 'saveAs':
+          updatedModals.saveAs = true;
+          break;
+        case 'importCSV':
+          updatedModals.csvImport = true;
+          break;
+        case 'search':
+          updatedModals.search = true;
+          break;
+        case 'formatCell':
+          updatedModals.formatCell = true;
+          break;
+        case 'about':
+          updatedModals.about = true;
+          break;
+        case 'shortcuts':
+          updatedModals.shortcuts = true;
+          break;
+        // モーダルを開かない操作はデフォルトの空の状態になる
+      }
+      
+      return updatedModals;
     });
     
-    // itemIdに応じて特定のモーダルだけを開く
+    // その後、各機能の実際の処理を実行
     switch (itemId) {
-      case 'open':
-        updatedModals.openFile = true;
+      // ファイルメニュー
+      case 'new':
+        console.log('新規作成処理を実行中...');
+        try {
+          handleNewFile();
+          console.log('新規作成処理完了');
+        } catch (error) {
+          console.error('新規作成エラー:', error);
+          updateStatusMessage('新規作成中にエラーが発生しました', 3000);
+        }
         break;
-      case 'saveAs':
-        updatedModals.saveAs = true;
-        break;
-      case 'importCSV':
-        updatedModals.csvImport = true;
-        break;
-      case 'search':
-        updatedModals.search = true;
-        break;
-      case 'formatCell':
-        updatedModals.formatCell = true;
-        break;
-      case 'about':
-        updatedModals.about = true;
-        break;
-      case 'shortcuts':
-        updatedModals.shortcuts = true;
-        break;
-      // モーダルを開かない操作はデフォルトの空の状態になる
-    }
-    
-    return updatedModals;
-  });
-  
-  // その後、各機能の実際の処理を実行
-  switch (itemId) {
-    // ファイルメニュー
-    case 'new':
-      console.log('新規作成処理を実行中...');
-      try {
-        handleNewFile();
-        console.log('新規作成処理完了');
-      } catch (error) {
-        console.error('新規作成エラー:', error);
-        updateStatusMessage('新規作成中にエラーが発生しました', 3000);
-      }
-      break;
-      
+        
       case 'open':
         console.log('ファイルを開く処理を実行中...');
         try {
@@ -553,7 +625,7 @@ const handleMenuItemClick = (itemId) => {
           updateStatusMessage('ファイルを開くダイアログの表示に失敗しました', 3000);
         }
         break;
-      
+        
       case 'save':
         console.log('保存処理を実行中...');
         try {
@@ -872,22 +944,40 @@ const handleMenuItemClick = (itemId) => {
    manualColumnResize: true,
    manualRowResize: true,
    comments: true,
+   // 編集関連の設定
+   readOnly: false, // 読み取り専用モードをオフ
+   disableVisualSelection: false, // 視覚的な選択を有効
+   editor: 'text', // デフォルトのテキストエディタを使用
+   fillHandle: true, // フィルハンドル機能の有効化
+   allowInsertRow: true, // 行の挿入を許可
+   allowInsertColumn: true, // 列の挿入を許可
+   autoWrapRow: true,
+   wordWrap: true,
+   allowEmpty: true, // 空セルを許可
+   enterBeginsEditing: true, // Enterキーで編集開始
+   enterMoves: { row: 1, col: 0 }, // Enter後の移動方向
+   tabMoves: { row: 0, col: 1 }, // Tab後の移動方向
+   // 数式エンジン
    ...(state.hyperformulaInstance ? {
      formulas: {
        engine: state.hyperformulaInstance,
        sheetName: currentSheet
      }
    } : {}),
+   // レイアウト関連の設定
    stretchH: 'all',
-   autoWrapRow: true,
-   wordWrap: true,
    mergeCells: true,
    fixedRowsTop: 0,
    fixedColumnsLeft: 0,
    minSpareRows: 5,
    minSpareCols: 2,
+   // イベントハンドラ
    afterSelectionEnd: handleAfterSelectionEnd,
    afterChange: handleAfterChange,
+   afterBeginEditing: handleAfterBeginEditing,
+   afterFinishEditing: handleAfterFinishEditing,
+   beforeKeyDown: handleBeforeKeyDown,
+   afterOnCellMouseDown: handleCellMouseDown,
    cells: function(row, col, prop) {
      return {};
    },
@@ -1041,6 +1131,18 @@ const handleMenuItemClick = (itemId) => {
                  <td>Ctrl+U</td>
                  <td>下線</td>
                </tr>
+               <tr>
+                 <td>F2</td>
+                 <td>セル編集モード</td>
+               </tr>
+               <tr>
+                 <td>Enter</td>
+                 <td>編集確定/下のセルに移動</td>
+               </tr>
+               <tr>
+                 <td>Tab</td>
+                 <td>右のセルに移動</td>
+               </tr>
              </tbody>
            </table>
          </div>
@@ -1056,6 +1158,3 @@ const handleMenuItemClick = (itemId) => {
 };
 
 export default SpreadsheetEditor;
-
-
-
