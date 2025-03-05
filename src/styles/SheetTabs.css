@@ -1,0 +1,81 @@
+.sheet-tabs {
+  display: flex;
+  background-color: #f1f1f1;
+  border-bottom: 1px solid #ddd;
+  padding-top: 5px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #ccc #f1f1f1;
+}
+
+.sheet-tabs::-webkit-scrollbar {
+  height: 6px;
+}
+
+.sheet-tabs::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.sheet-tabs::-webkit-scrollbar-thumb {
+  background-color: #ccc;
+  border-radius: 3px;
+}
+
+.sheet-tab {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  background-color: #e6e6e6;
+  border: 1px solid #ddd;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  margin-right: 2px;
+  min-width: 80px;
+  max-width: 160px;
+  cursor: pointer;
+  user-select: none;
+  color: #555;
+  font-size: 13px;
+  transition: background-color 0.2s;
+  position: relative;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sheet-tab:hover:not(.active):not(.add-sheet) {
+  background-color: #dedede;
+}
+
+.sheet-tab.active {
+  background-color: white;
+  border-bottom: 1px solid white;
+  margin-bottom: -1px;
+  font-weight: 600;
+  color: #1976d2;
+  z-index: 1;
+}
+
+.sheet-tab-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.add-sheet {
+  min-width: 36px;
+  width: 36px;
+  padding: 8px 0;
+  justify-content: center;
+  background-color: #eaeaea;
+}
+
+.add-sheet:hover {
+  background-color: #d6d6d6;
+}
+
+.add-icon {
+  font-weight: bold;
+  font-size: 16px;
+  color: #666;
+}
