@@ -336,6 +336,21 @@ const SpreadsheetEditor = () => {
     };
   }, [forceRenderGrid, currentSheetData]);
 
+  // デバッグモードの追加
+  useEffect(() => {
+    // デバッグ用のグローバル変数
+    window.hotInstance = hotRef.current?.hotInstance;
+    window.debugSpreadsheet = {
+      getHotInstance: () => hotRef.current?.hotInstance,
+      getState: () => state,
+      forceRender: forceRenderGrid,
+      enterEditMode,
+      getCurrentData: () => hotRef.current?.hotInstance?.getData(),
+    };
+    
+    console.log('デバッグモードが有効になりました。window.debugSpreadsheetでアクセスできます。');
+  }, [forceRenderGrid, enterEditMode, state]);
+
   // セル選択時のイベントハンドラー
   const handleAfterSelectionEnd = (row, column, row2, column2) => {
     // セルアドレスを更新（例: A1）
@@ -356,24 +371,24 @@ const SpreadsheetEditor = () => {
   };
 
   // ダブルクリックでセル編集を開始
-const handleCellMouseDown = useCallback((event, coords) => {
-  console.log('セルのマウスダウンイベント:', coords);
-  // 単純なクリックでセルを選択
-  const hot = hotRef.current?.hotInstance;
-  if (hot && !hot.isDestroyed) {
-    hot.selectCell(coords.row, coords.col);
-    
-    // ダブルクリックで編集モード
-    if (event.detail === 2) {
-      setTimeout(() => {
-        if (hot.getActiveEditor()) {
-          hot.getActiveEditor().beginEditing();
-          setIsEditMode(true);
-        }
-      }, 10);
+  const handleCellMouseDown = useCallback((event, coords) => {
+    console.log('セルのマウスダウンイベント:', coords);
+    // 単純なクリックでセルを選択
+    const hot = hotRef.current?.hotInstance;
+    if (hot && !hot.isDestroyed) {
+      hot.selectCell(coords.row, coords.col);
+      
+      // ダブルクリックで編集モード
+      if (event.detail === 2) {
+        setTimeout(() => {
+          if (hot.getActiveEditor()) {
+            hot.getActiveEditor().beginEditing();
+            setIsEditMode(true);
+          }
+        }, 10);
+      }
     }
-  }
-}, []);
+  }, []);
 
   // 選択範囲の統計情報を更新
   const updateCellSelectionStats = (row, col, row2, col2) => {
@@ -419,13 +434,21 @@ const handleCellMouseDown = useCallback((event, coords) => {
 
   // 数式バーでEnterキーが押された時の処理
   const handleFormulaSubmit = () => {
+    console.log('数式バーから編集を確定:', formulaValue);
     const hot = hotRef.current.hotInstance;
     if (selectedCell) {
       // 変更前の状態をアンドゥスタックに保存
       pushToUndoStack(hot);
       
-      // セルの値を更新
-      hot.setDataAtCell(selectedCell.row, selectedCell.col, formulaValue);
+      // セルの値を更新（明示的に処理）
+      const { row, col } = selectedCell;
+      setTimeout(() => {
+        hot.setDataAtCell(row, col, formulaValue);
+        console.log('数式バーから設定した値:', formulaValue, row, col);
+        
+        // 強制的にレンダリング
+        hot.render();
+      }, 10);
       
       // 編集モードを終了
       setIsFormulaEditing(false);
@@ -434,6 +457,7 @@ const handleCellMouseDown = useCallback((event, coords) => {
 
   // データ変更時のイベントハンドラー
   const handleAfterChange = (changes, source) => {
+    console.log('データ変更イベント:', changes, source);
     if (!changes || source === 'loadData') return;
     
     const hot = hotRef.current.hotInstance;
@@ -441,56 +465,61 @@ const handleCellMouseDown = useCallback((event, coords) => {
     // 変更前の状態をアンドゥスタックに保存
     pushToUndoStack(hot);
     
+    // 明示的にデータを取得して更新
+    const updatedData = hot.getData();
+    
     // シートデータを更新
-    updateCurrentSheetData(hot.getData());
+    updateCurrentSheetData(updatedData);
     
     // 変更フラグを設定
     setModified(true);
+    
+    console.log('データ更新完了:', updatedData);
   };
 
   // セル編集の開始/終了イベントハンドラー
   const handleBeforeKeyDown = (event) => {
-  // Enterキーの処理をカスタマイズ
-  if (event.keyCode === 13) { // Enterキー
-    const hot = hotRef.current.hotInstance;
-    const selected = hot.getSelected();
-    
-    if (selected && selected.length > 0) {
-      const [row, col, row2, col2] = selected[0];
+    // Enterキーの処理をカスタマイズ
+    if (event.keyCode === 13) { // Enterキー
+      const hot = hotRef.current.hotInstance;
+      const selected = hot.getSelected();
       
-      if (isEditMode) {
-        // 現在の編集を確定
-        const editor = hot.getActiveEditor();
-        if (editor) {
-          // 編集内容を保存して確定
-          const value = editor.getValue();
-          hot.destroyEditor(true); // 変更を保存
-          setIsEditMode(false);
-          
-          // 変更を明示的に適用
-          setTimeout(() => {
-            console.log('編集を確定:', value, row, col);
-            hot.setDataAtCell(row, col, value);
+      if (selected && selected.length > 0) {
+        const [row, col, row2, col2] = selected[0];
+        
+        if (isEditMode) {
+          // 現在の編集を確定
+          const editor = hot.getActiveEditor();
+          if (editor) {
+            // 編集内容を保存して確定
+            const value = editor.getValue();
+            hot.destroyEditor(true); // 変更を保存
+            setIsEditMode(false);
             
-            // 次のセルに移動
-            hot.selectCell(row + 1, col);
-          }, 10);
+            // 変更を明示的に適用
+            setTimeout(() => {
+              console.log('編集を確定:', value, row, col);
+              hot.setDataAtCell(row, col, value);
+              
+              // 次のセルに移動
+              hot.selectCell(row + 1, col);
+            }, 10);
+          }
+          
+          event.stopImmediatePropagation(); // デフォルトの動作を停止
+          event.preventDefault();
+          return false;
+        } else {
+          // 編集モードでなければ、編集モードに入る
+          enterEditMode(row, col);
+          
+          event.stopImmediatePropagation();
+          event.preventDefault();
+          return false;
         }
-        
-        event.stopImmediatePropagation(); // デフォルトの動作を停止
-        event.preventDefault();
-        return false;
-      } else {
-        // 編集モードでなければ、編集モードに入る
-        enterEditMode(row, col);
-        
-        event.stopImmediatePropagation();
-        event.preventDefault();
-        return false;
       }
     }
-  }
-};
+  };
 
   // 編集開始のハンドラー
   const handleAfterBeginEditing = () => {
@@ -742,8 +771,8 @@ const handleCellMouseDown = useCallback((event, coords) => {
           updateStatusMessage('元に戻す操作に失敗しました', 3000);
         }
         break;
-        
-      case 'redo':
+
+       case 'redo':
         console.log('やり直し処理を実行中...');
         try {
           if (hotRef.current && hotRef.current.hotInstance) {
@@ -758,7 +787,7 @@ const handleCellMouseDown = useCallback((event, coords) => {
         }
         break;
         
-      case 'cut':
+     case 'cut':
         console.log('切り取り処理を実行中...');
         try {
           document.execCommand('cut');
@@ -934,227 +963,243 @@ const handleCellMouseDown = useCallback((event, coords) => {
    }
  };
 
- // Handsontableの設定
- const hotSettings = {
-   data: currentSheetData || Array(50).fill().map(() => Array(26).fill('')),
-   rowHeaders: true,
-   colHeaders: (index) => numToLetter(index), // アルファベットの列ヘッダー
-   licenseKey: 'non-commercial-and-evaluation',
-   contextMenu: true,
-   manualColumnResize: true,
-   manualRowResize: true,
-   comments: true,
-   // 編集関連の設定
-   readOnly: false, // 読み取り専用モードをオフ
-   disableVisualSelection: false, // 視覚的な選択を有効
-   editor: 'text', // デフォルトのテキストエディタを使用
-   fillHandle: true, // フィルハンドル機能の有効化
-   allowInsertRow: true, // 行の挿入を許可
-   allowInsertColumn: true, // 列の挿入を許可
-   autoWrapRow: true,
-   wordWrap: true,
-   allowEmpty: true, // 空セルを許可
-   enterBeginsEditing: true, // Enterキーで編集開始
-   enterMoves: { row: 1, col: 0 }, // Enter後の移動方向
-   tabMoves: { row: 0, col: 1 }, // Tab後の移動方向
-   // 数式エンジン
-   ...(state.hyperformulaInstance ? {
-     formulas: {
-       engine: state.hyperformulaInstance,
-       sheetName: currentSheet
-     }
-   } : {}),
-   // レイアウト関連の設定
-   stretchH: 'all',
-   mergeCells: true,
-   fixedRowsTop: 0,
-   fixedColumnsLeft: 0,
-   minSpareRows: 5,
-   minSpareCols: 2,
-   // イベントハンドラ
-   afterSelectionEnd: handleAfterSelectionEnd,
-   afterChange: handleAfterChange,
-   afterBeginEditing: handleAfterBeginEditing,
-   afterFinishEditing: handleAfterFinishEditing,
-   beforeKeyDown: handleBeforeKeyDown,
-   afterOnCellMouseDown: handleCellMouseDown,
-   cells: function(row, col, prop) {
-     return {};
-   },
-   className: 'htCustomStyles',
-   outsideClickDeselects: false,
-   renderAllRows: true,
-   viewportColumnRenderingOffset: 100,
-   viewportRowRenderingOffset: 100
- };
+  // Handsontableの設定
+  const hotSettings = {
+    data: currentSheetData || Array(50).fill().map(() => Array(26).fill('')),
+    rowHeaders: true,
+    colHeaders: (index) => numToLetter(index), // アルファベットの列ヘッダー
+    licenseKey: 'non-commercial-and-evaluation',
+    contextMenu: true,
+    manualColumnResize: true,
+    manualRowResize: true,
+    comments: true,
+    // 編集関連の設定
+    readOnly: false, // 読み取り専用モードをオフ
+    disableVisualSelection: false, // 視覚的な選択を有効
+    editor: 'text', // デフォルトのテキストエディタを使用
+    fillHandle: true, // フィルハンドル機能の有効化
+    allowInsertRow: true, // 行の挿入を許可
+    allowInsertColumn: true, // 列の挿入を許可
+    autoWrapRow: true,
+    wordWrap: true,
+    allowEmpty: true, // 空セルを許可
+    enterBeginsEditing: true, // Enterキーで編集開始
+    enterMoves: { row: 1, col: 0 }, // Enter後の移動方向
+    tabMoves: { row: 0, col: 1 }, // Tab後の移動方向
+    fragmentSelection: false, // ドラッグ選択の問題を修正
+    outsideClickDeselects: false, // 外部クリックによる選択解除を防止
+    persistentState: true, // 状態の永続化
+    autoSave: true, // 自動保存を有効化
+    
+    // 数式エンジン
+    ...(state.hyperformulaInstance ? {
+      formulas: {
+        engine: state.hyperformulaInstance,
+        sheetName: currentSheet
+      }
+    } : {}),
+    
+    // レイアウト関連の設定
+    stretchH: 'all',
+    mergeCells: true,
+    fixedRowsTop: 0,
+    fixedColumnsLeft: 0,
+    minSpareRows: 5,
+    minSpareCols: 2,
+    
+    // イベントハンドラ
+    afterSelectionEnd: handleAfterSelectionEnd,
+    afterChange: handleAfterChange,
+    afterBeginEditing: handleAfterBeginEditing,
+    afterFinishEditing: handleAfterFinishEditing,
+    beforeKeyDown: handleBeforeKeyDown,
+    afterOnCellMouseDown: handleCellMouseDown,
+    beforeChange: (changes, source) => {
+      console.log('変更前:', changes, source);
+      return changes; // すべての変更を許可
+    },
+    afterSetDataAtCell: (changes, source) => {
+      console.log('セルデータ設定後:', changes, source);
+      forceRenderGrid(); // 強制再レンダリング
+    },
+    cells: function(row, col, prop) {
+      return {};
+    },
+    className: 'htCustomStyles',
+    renderAllRows: true,
+    viewportColumnRenderingOffset: 100,
+    viewportRowRenderingOffset: 100
+  };
 
- return (
-   <div className="spreadsheet-container">
-     <Helmet>
-       <title>{isModified ? `*${currentFilename}` : currentFilename} - 拡張スプレッドシート</title>
-     </Helmet>
-     
-     <div className="header">
-       <h1>拡張スプレッドシート</h1>
-       <div className="file-info">
-         {currentFilename} {isModified && '*'}
-         {lastSaved && (
-           <span className="last-saved">
-             （最終保存: {new Date(lastSaved).toLocaleString()}）
-           </span>
-         )}
-       </div>
-     </div>
-     
-     {/* メニューバー */}
-     <MenuBar onMenuItemClick={handleMenuItemClick} />
-     
-     {/* ツールバー */}
-     <Toolbar 
-       onNew={handleNewFile}
-       onSave={handleSave}
-       onUndo={() => undo(hotRef.current?.hotInstance)}
-       onRedo={() => redo(hotRef.current?.hotInstance)}
-       onApplyBold={() => applyStyleToSelection(hotRef.current?.hotInstance, { fontWeight: 'bold' })}
-       onApplyItalic={() => applyStyleToSelection(hotRef.current?.hotInstance, { fontStyle: 'italic' })}
-       onApplyUnderline={() => applyStyleToSelection(hotRef.current?.hotInstance, { textDecoration: 'underline' })}
-       onAlignLeft={() => applyStyleToSelection(hotRef.current?.hotInstance, { textAlign: 'left' })}
-       onAlignCenter={() => applyStyleToSelection(hotRef.current?.hotInstance, { textAlign: 'center' })}
-       onAlignRight={() => applyStyleToSelection(hotRef.current?.hotInstance, { textAlign: 'right' })}
-     />
-     
-     {/* 数式バー */}
-     <FormulaBar 
-       cellAddress={cellAddress}
-       value={formulaValue}
-       onChange={handleFormulaInputChange}
-       onSubmit={handleFormulaSubmit}
-       onFocus={() => setIsFormulaEditing(true)}
-       onBlur={() => setIsFormulaEditing(false)}
-     />
-     
-     {/* シートタブ */}
-     <SheetTabs 
-       sheets={sheets}
-       currentSheet={currentSheet}
-       onSheetChange={(sheetId) => switchToSheet(sheetId)}
-       onAddSheet={() => addSheet()}
-     />
-     
-     {/* スプレッドシート本体 */}
-     <div className="spreadsheet-wrapper">
-       <HotTable
-         ref={hotRef}
-         {...hotSettings}
-       />
-     </div>
-     
-     {/* ステータスバー */}
-     <StatusBar 
-       message={statusMessage}
-       stats={selectionStats}
-     />
-     
-     {/* モーダルの実装 */}
-     {showModals.openFile && (
-       <OpenFileModal 
-         onClose={() => setShowModals(prev => ({...prev, openFile: false}))}
-         onFileOpen={loadSavedFile}
-         savedFiles={getSavedFilesList()}
-       />
-     )}
+  return (
+    <div className="spreadsheet-container">
+      <Helmet>
+        <title>{isModified ? `*${currentFilename}` : currentFilename} - 拡張スプレッドシート</title>
+      </Helmet>
+      
+      <div className="header">
+        <h1>拡張スプレッドシート</h1>
+        <div className="file-info">
+          {currentFilename} {isModified && '*'}
+          {lastSaved && (
+            <span className="last-saved">
+              （最終保存: {new Date(lastSaved).toLocaleString()}）
+            </span>
+          )}
+        </div>
+      </div>
+      
+      {/* メニューバー */}
+      <MenuBar onMenuItemClick={handleMenuItemClick} />
+      
+      {/* ツールバー */}
+      <Toolbar 
+        onNew={handleNewFile}
+        onSave={handleSave}
+        onUndo={() => undo(hotRef.current?.hotInstance)}
+        onRedo={() => redo(hotRef.current?.hotInstance)}
+        onApplyBold={() => applyStyleToSelection(hotRef.current?.hotInstance, { fontWeight: 'bold' })}
+        onApplyItalic={() => applyStyleToSelection(hotRef.current?.hotInstance, { fontStyle: 'italic' })}
+        onApplyUnderline={() => applyStyleToSelection(hotRef.current?.hotInstance, { textDecoration: 'underline' })}
+        onAlignLeft={() => applyStyleToSelection(hotRef.current?.hotInstance, { textAlign: 'left' })}
+        onAlignCenter={() => applyStyleToSelection(hotRef.current?.hotInstance, { textAlign: 'center' })}
+        onAlignRight={() => applyStyleToSelection(hotRef.current?.hotInstance, { textAlign: 'right' })}
+      />
+      
+      {/* 数式バー */}
+      <FormulaBar 
+        cellAddress={cellAddress}
+        value={formulaValue}
+        onChange={handleFormulaInputChange}
+        onSubmit={handleFormulaSubmit}
+        onFocus={() => setIsFormulaEditing(true)}
+        onBlur={() => setIsFormulaEditing(false)}
+      />
+      
+      {/* シートタブ */}
+      <SheetTabs 
+        sheets={sheets}
+        currentSheet={currentSheet}
+        onSheetChange={(sheetId) => switchToSheet(sheetId)}
+        onAddSheet={() => addSheet()}
+      />
+      
+      {/* スプレッドシート本体 */}
+      <div className="spreadsheet-wrapper">
+        <HotTable
+          ref={hotRef}
+          {...hotSettings}
+        />
+      </div>
+      
+      {/* ステータスバー */}
+      <StatusBar 
+        message={statusMessage}
+        stats={selectionStats}
+      />
+      
+      {/* モーダルの実装 */}
+      {showModals.openFile && (
+        <OpenFileModal 
+          onClose={() => setShowModals(prev => ({...prev, openFile: false}))}
+          onFileOpen={loadSavedFile}
+          savedFiles={getSavedFilesList()}
+        />
+      )}
 
-     {showModals.saveAs && (
-       <SaveAsModal 
-         onClose={() => setShowModals(prev => ({...prev, saveAs: false}))}
-         onSave={saveAs}
-         currentFilename={currentFilename}
-       />
-     )}
+      {showModals.saveAs && (
+        <SaveAsModal 
+          onClose={() => setShowModals(prev => ({...prev, saveAs: false}))}
+          onSave={saveAs}
+          currentFilename={currentFilename}
+        />
+      )}
 
-     {showModals.csvImport && (
-       <CSVImportModal 
-         onClose={() => setShowModals(prev => ({...prev, csvImport: false}))}
-         onImport={importCSV}
-       />
-     )}
+      {showModals.csvImport && (
+        <CSVImportModal 
+          onClose={() => setShowModals(prev => ({...prev, csvImport: false}))}
+          onImport={importCSV}
+        />
+      )}
 
-     {showModals.about && (
-       <Modal title="バージョン情報" onClose={() => setShowModals(prev => ({...prev, about: false}))}>
-         <div className="modal-body">
-           <p>拡張スプレッドシート バージョン 0.1.0</p>
-           <p>このアプリケーションは高度なスプレッドシート機能を提供します。</p>
-           <p>© 2025 拡張スプレッドシート開発チーム</p>
-         </div>
-         <div className="modal-footer">
-           <button className="primary" onClick={() => setShowModals(prev => ({...prev, about: false}))}>閉じる</button>
-         </div>
-       </Modal>
-     )}
+      {showModals.about && (
+        <Modal title="バージョン情報" onClose={() => setShowModals(prev => ({...prev, about: false}))}>
+          <div className="modal-body">
+            <p>拡張スプレッドシート バージョン 0.1.0</p>
+            <p>このアプリケーションは高度なスプレッドシート機能を提供します。</p>
+            <p>© 2025 拡張スプレッドシート開発チーム</p>
+          </div>
+          <div className="modal-footer">
+            <button className="primary" onClick={() => setShowModals(prev => ({...prev, about: false}))}>閉じる</button>
+          </div>
+        </Modal>
+      )}
 
-     {showModals.shortcuts && (
-       <Modal title="キーボードショートカット" onClose={() => setShowModals(prev => ({...prev, shortcuts: false}))}>
-         <div className="modal-body">
-           <table className="shortcuts-table">
-             <thead>
-               <tr>
-                 <th>ショートカット</th>
-                 <th>機能</th>
-               </tr>
-             </thead>
-             <tbody>
-               <tr>
-                 <td>Ctrl+N</td>
-                 <td>新規作成</td>
-               </tr>
-               <tr>
-                 <td>Ctrl+S</td>
-                 <td>保存</td>
-               </tr>
-               <tr>
-                 <td>Ctrl+Z</td>
-                 <td>元に戻す</td>
-               </tr>
-               <tr>
-                 <td>Ctrl+Y</td>
-                 <td>やり直し</td>
-               </tr>
-               <tr>
-                 <td>Ctrl+B</td>
-                 <td>太字</td>
-               </tr>
-               <tr>
-                 <td>Ctrl+I</td>
-                 <td>斜体</td>
-               </tr>
-               <tr>
-                 <td>Ctrl+U</td>
-                 <td>下線</td>
-               </tr>
-               <tr>
-                 <td>F2</td>
-                 <td>セル編集モード</td>
-               </tr>
-               <tr>
-                 <td>Enter</td>
-                 <td>編集確定/下のセルに移動</td>
-               </tr>
-               <tr>
-                 <td>Tab</td>
-                 <td>右のセルに移動</td>
-               </tr>
-             </tbody>
-           </table>
-         </div>
-         <div className="modal-footer">
-           <button className="primary" onClick={() => setShowModals(prev => ({...prev, shortcuts: false}))}>閉じる</button>
-         </div>
-       </Modal>
-     )}
+      {showModals.shortcuts && (
+        <Modal title="キーボードショートカット" onClose={() => setShowModals(prev => ({...prev, shortcuts: false}))}>
+          <div className="modal-body">
+            <table className="shortcuts-table">
+              <thead>
+                <tr>
+                  <th>ショートカット</th>
+                  <th>機能</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Ctrl+N</td>
+                  <td>新規作成</td>
+                </tr>
+                <tr>
+                  <td>Ctrl+S</td>
+                  <td>保存</td>
+                </tr>
+                <tr>
+                  <td>Ctrl+Z</td>
+                  <td>元に戻す</td>
+                </tr>
+                <tr>
+                  <td>Ctrl+Y</td>
+                  <td>やり直し</td>
+                </tr>
+                <tr>
+                  <td>Ctrl+B</td>
+                  <td>太字</td>
+                </tr>
+                <tr>
+                  <td>Ctrl+I</td>
+                  <td>斜体</td>
+                </tr>
+                <tr>
+                  <td>Ctrl+U</td>
+                  <td>下線</td>
+                </tr>
+                <tr>
+                  <td>F2</td>
+                  <td>セル編集モード</td>
+                </tr>
+                <tr>
+                  <td>Enter</td>
+                  <td>編集確定/下のセルに移動</td>
+                </tr>
+                <tr>
+                  <td>Tab</td>
+                  <td>右のセルに移動</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div className="modal-footer">
+            <button className="primary" onClick={() => setShowModals(prev => ({...prev, shortcuts: false}))}>閉じる</button>
+          </div>
+        </Modal>
+      )}
 
-     {/* 他のモーダルも必要に応じて追加 */}
-   </div>
- );
+      {/* 他のモーダルも必要に応じて追加 */}
+    </div>
+  );
 };
 
 export default SpreadsheetEditor;
+
+        
