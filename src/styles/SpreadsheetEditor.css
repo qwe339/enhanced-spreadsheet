@@ -1,25 +1,28 @@
-/* スプレッドシートエディタの全体的なレイアウト */
-.spreadsheet-container {
+/* スプレッドシートエディタの全体レイアウト */
+.spreadsheet-editor {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  width: 100%;
   overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-  background-color: #f5f5f5;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: #f0f0f0;
 }
 
-.header {
+/* ヘッダー */
+.spreadsheet-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 16px;
+  padding: 0 16px;
+  height: 48px;
   background-color: #1976d2;
   color: white;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  z-index: 900;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  z-index: 10;
 }
 
-.header h1 {
+.spreadsheet-header h1 {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
@@ -27,173 +30,53 @@
 
 .file-info {
   font-size: 14px;
+}
+
+/* メニューバー */
+.menu-bar {
   display: flex;
-  align-items: center;
+  background-color: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 0;
+  z-index: 9;
 }
 
-.last-saved {
-  font-size: 12px;
-  opacity: 0.9;
-  margin-left: 8px;
-}
-
-.spreadsheet-wrapper {
-  flex-grow: 1;
-  position: relative;
-  overflow: hidden;
-  background-color: white;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-  min-height: 400px;
+/* ツールバー */
+.toolbar {
   display: flex;
-  z-index: 1;
-}
-
-.spreadsheet-wrapper .handsontable {
-  width: 100% !important;
-  height: 100% !important;
+  padding: 4px 8px;
+  background-color: #f9f9f9;
+  border-bottom: 1px solid #e0e0e0;
+  z-index: 8;
 }
 
 /* 数式バー */
 .formula-bar {
   display: flex;
   align-items: center;
+  padding: 6px 8px;
   background-color: #f9f9f9;
   border-bottom: 1px solid #e0e0e0;
-  padding: 6px 10px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  z-index: 7;
 }
 
-.cell-address-container {
-  display: flex;
-  align-items: center;
-  padding: 0 10px;
-  margin-right: 10px;
-  border-right: 1px solid #e0e0e0;
-}
-
-.cell-address-label {
-  color: #666;
-  font-size: 12px;
-  margin-right: 6px;
-  font-weight: 500;
-}
-
-.cell-address {
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-weight: 600;
-  color: #1976d2;
-  background-color: #e3f2fd;
-  padding: 4px 8px;
-  border-radius: 3px;
-  min-width: 40px;
-  text-align: center;
-}
-
-.formula-input-container {
-  display: flex;
-  align-items: center;
-  flex-grow: 1;
-  background-color: white;
-  border: 1px solid #e0e0e0;
-  border-radius: 3px;
-  padding: 0 8px;
-}
-
-.formula-label {
-  color: #666;
-  font-size: 14px;
-  font-weight: 600;
-  margin-right: 8px;
-  font-style: italic;
-}
-
-.formula-input {
-  flex-grow: 1;
-  border: none;
-  outline: none;
-  padding: 6px 0;
-  font-size: 14px;
-  background-color: transparent;
-  font-family: 'Consolas', 'Monaco', monospace;
-}
-
-.formula-submit-button {
-  background-color: #1976d2;
-  color: white;
-  border: none;
-  border-radius: 3px;
-  width: 28px;
-  height: 28px;
-  margin-left: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.formula-submit-button:hover {
-  background-color: #1565c0;
+/* スプレッドシートグリッドコンテナ - 重要！ */
+.spreadsheet-grid-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background-color: #fff;
+  z-index: 1;
 }
 
 /* シートタブ */
 .sheet-tabs {
   display: flex;
-  background-color: #f1f1f1;
-  border-bottom: 1px solid #ddd;
-  padding-top: 5px;
-  overflow-x: auto;
-  scrollbar-width: thin;
-  scrollbar-color: #ccc #f1f1f1;
-}
-
-.sheet-tab {
-  display: flex;
   align-items: center;
-  padding: 8px 16px;
-  background-color: #e6e6e6;
-  border: 1px solid #ddd;
-  border-bottom: none;
-  border-radius: 4px 4px 0 0;
-  margin-right: 2px;
-  min-width: 80px;
-  max-width: 160px;
-  cursor: pointer;
-  user-select: none;
-  color: #555;
-  font-size: 13px;
-  transition: background-color 0.2s;
-  position: relative;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sheet-tab:hover:not(.active):not(.add-sheet) {
-  background-color: #dedede;
-}
-
-.sheet-tab.active {
-  background-color: white;
-  border-bottom: 1px solid white;
-  margin-bottom: -1px;
-  font-weight: 600;
-  color: #1976d2;
-  z-index: 1;
-}
-
-.add-sheet {
-  min-width: 36px;
-  width: 36px;
-  padding: 8px 0;
-  justify-content: center;
-  background-color: #eaeaea;
-}
-
-.add-icon {
-  font-weight: bold;
-  font-size: 16px;
-  color: #666;
+  padding: 4px 8px;
+  background-color: #f1f1f1;
+  border-top: 1px solid #e0e0e0;
+  z-index: 6;
 }
 
 /* ステータスバー */
@@ -201,96 +84,118 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background-color: #f9f9f9;
+  padding: 4px 8px;
+  height: 24px;
+  background-color: #f5f5f5;
   border-top: 1px solid #e0e0e0;
-  padding: 4px 10px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
   font-size: 12px;
-  color: #555;
-  height: 30px;
+  z-index: 5;
 }
 
-.status-message {
-  padding: 2px 8px;
-  background-color: #f0f0f0;
-  border-radius: 3px;
-  max-width: 50%;
-  white-space: nowrap;
+/**************** Handsontable カスタマイズ ****************/
+/* グリッドの全体スタイル - 重要！ */
+.handsontable-grid {
+  width: 100% !important;
+  height: 100% !important;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.status-stats {
-  display: flex;
-  align-items: center;
+/* マス目の境界線を明示的に表示 - 最重要！ */
+.handsontable .htCore td {
+  border-right: 1px solid #ccc !important;
+  border-bottom: 1px solid #ccc !important;
 }
 
-.stats-item {
-  display: flex;
-  align-items: center;
-  margin-left: 8px;
+.handsontable .htCore tbody tr:first-child td {
+  border-top: 1px solid #ccc !important;
 }
 
-.stats-label {
-  color: #666;
-  margin-right: 4px;
+.handsontable .htCore tbody tr td:first-child {
+  border-left: 1px solid #ccc !important;
 }
 
-.stats-value {
-  font-weight: 600;
-  font-family: 'Consolas', 'Monaco', monospace;
+/* ヘッダーのスタイル */
+.handsontable .htCore th {
+  background-color: #f3f3f3;
+  color: #333;
+  font-weight: bold;
+  border: 1px solid #ccc !important;
+  text-align: center;
 }
 
-.stats-separator {
-  margin: 0 8px;
-  color: #ccc;
+/* 選択セルのスタイル */
+.handsontable .ht__selection--filled {
+  background-color: #e3f2fd !important;
 }
 
-/* セルのカスタムスタイル */
-.font-bold {
-  font-weight: bold !important;
+.handsontable .ht__active_highlight {
+  border: 2px solid #1976d2 !important;
+  box-shadow: 0 0 5px rgba(25, 118, 210, 0.4);
 }
 
-.font-italic {
-  font-style: italic !important;
+/* 選択範囲のスタイル */
+.handsontable .ht__selection--multiple {
+  background-color: rgba(25, 118, 210, 0.1) !important;
+  border: 1px solid #1976d2 !important;
 }
 
-.text-underline {
-  text-decoration: underline !important;
+/* セルの最小サイズを保証 */
+.handsontable .htCore td {
+  min-width: 40px;
+  min-height: 24px;
+  padding: 2px 4px;
 }
 
-.text-line-through {
-  text-decoration: line-through !important;
+/* スクロールバーのカスタマイズ */
+.handsontable ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
 
-.text-left {
-  text-align: left !important;
+.handsontable ::-webkit-scrollbar-track {
+  background: #f1f1f1; 
+}
+ 
+.handsontable ::-webkit-scrollbar-thumb {
+  background: #bbb; 
+  border-radius: 4px;
 }
 
-.text-center {
-  text-align: center !important;
+.handsontable ::-webkit-scrollbar-thumb:hover {
+  background: #999; 
 }
 
-.text-right {
-  text-align: right !important;
+/* コーナーセルのスタイル */
+.handsontable .htCore th.ht__highlight {
+  background-color: #e6e6e6;
 }
 
-.text-xs {
-  font-size: 10px !important;
+/* 行・列リサイズハンドルのスタイル */
+.handsontable .manualColumnResizer,
+.handsontable .manualRowResizer {
+  background-color: #1976d2;
+  opacity: 0.3;
 }
 
-.text-sm {
-  font-size: 12px !important;
+.handsontable .manualColumnResizer:hover,
+.handsontable .manualRowResizer:hover,
+.handsontable .manualColumnResizer.active,
+.handsontable .manualRowResizer.active {
+  background-color: #1976d2;
+  opacity: 0.7;
 }
 
-.text-md {
-  font-size: 14px !important;
+/* ホバー状態のセルのスタイル */
+.handsontable .htCore td.current {
+  background-color: rgba(233, 245, 255, 0.5) !important;
 }
 
-.text-lg {
-  font-size: 16px !important;
+/* ビューポートを確実に表示 */
+.handsontable .wtHolder {
+  overflow: visible;
 }
 
-.text-xl {
-  font-size: 18px !important;
+/* Handsontableのテーブルが確実に表示されるように */
+.handsontable {
+  overflow: visible !important;
 }
