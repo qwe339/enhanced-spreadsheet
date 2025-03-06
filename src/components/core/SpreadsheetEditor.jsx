@@ -160,42 +160,42 @@ const SpreadsheetEditor = () => {
     console.log('現在のモーダル表示状態:', showModals);
   }, [showModals]);
 
-  // HyperFormulaの初期化と設定
-  useEffect(() => {
-    if (!state.hyperformulaInstance) {
+// HyperFormulaの初期化と設定
+useEffect(() => {
+  if (!state.hyperformulaInstance) {
+    try {
+      // HyperFormulaインスタンスを作成
+      const hfInstance = HyperFormula.buildEmpty({
+        licenseKey: 'gpl-v3',
+        maxColumns: 100,
+        maxRows: 1000
+      });
+      
+      // シートを明示的に作成
       try {
-        // HyperFormulaインスタンスを作成
-        const hfInstance = HyperFormula.buildEmpty({
-          licenseKey: 'gpl-v3',
-          maxColumns: 100,
-          maxRows: 1000
+        // 既存のシートをすべて登録
+        state.sheets.forEach(sheetId => {
+          if (!hfInstance.doesSheetExist(sheetId)) {
+            hfInstance.addSheet(sheetId);
+          }
         });
-        
-        // シートを明示的に作成
-        try {
-          // 既存のシートをすべて登録
-          state.sheets.forEach(sheetId => {
-            if (!hfInstance.doesSheetExist(sheetId)) {
-              hfInstance.addSheet(sheetId);
-            }
-          });
-          console.log('シートが正常に作成されました');
-        } catch (sheetError) {
-          console.warn('シート作成の警告:', sheetError);
-        }
-        
-        // 状態に保存
-        dispatch({
-          type: actionTypes.SET_HYPERFORMULA_INSTANCE,
-          payload: hfInstance
-        });
-        
-        console.log('HyperFormulaが正常に初期化されました');
-      } catch (error) {
-        console.error('HyperFormula初期化エラー:', error);
+        console.log('シートが正常に作成されました');
+      } catch (sheetError) {
+        console.warn('シート作成の警告:', sheetError);
       }
+      
+      // 状態に保存
+      dispatch({
+        type: actionTypes.SET_HYPERFORMULA_INSTANCE,
+        payload: hfInstance
+      });
+      
+      console.log('HyperFormulaが正常に初期化されました');
+    } catch (error) {
+      console.error('HyperFormula初期化エラー:', error);
     }
-  }, [state.hyperformulaInstance, state.sheets, dispatch, actionTypes]);
+  }
+}, [state.hyperformulaInstance, state.sheets, dispatch, actionTypes]);
 
   // ページタイトルの更新
   useEffect(() => {
@@ -307,6 +307,18 @@ const SpreadsheetEditor = () => {
     };
   }, [enterEditMode]);
 
+// コンポーネントマウント時に強制再レンダリング
+useEffect(() => {
+  const timer = setTimeout(() => {
+    if (hotRef.current && hotRef.current.hotInstance) {
+      console.log('グリッドの強制再レンダリングを実行');
+      hotRef.current.hotInstance.render();
+    }
+  }, 500);
+  
+  return () => clearTimeout(timer);
+}, []);
+
   // コンポーネントマウント時とリサイズ時の処理
   useEffect(() => {
     console.log('コンポーネントがマウントされました');
@@ -371,24 +383,24 @@ const SpreadsheetEditor = () => {
   };
 
   // ダブルクリックでセル編集を開始
-  const handleCellMouseDown = useCallback((event, coords) => {
-    console.log('セルのマウスダウンイベント:', coords);
-    // 単純なクリックでセルを選択
-    const hot = hotRef.current?.hotInstance;
-    if (hot && !hot.isDestroyed) {
-      hot.selectCell(coords.row, coords.col);
-      
-      // ダブルクリックで編集モード
-      if (event.detail === 2) {
-        setTimeout(() => {
-          if (hot.getActiveEditor()) {
-            hot.getActiveEditor().beginEditing();
-            setIsEditMode(true);
-          }
-        }, 10);
-      }
+const handleCellMouseDown = useCallback((event, coords) => {
+  console.log('セルのマウスダウンイベント:', coords);
+  // 単純なクリックでセルを選択
+  const hot = hotRef.current?.hotInstance;
+  if (hot && !hot.isDestroyed) {
+    hot.selectCell(coords.row, coords.col);
+    
+    // ダブルクリックで編集モード
+    if (event.detail === 2) {
+      setTimeout(() => {
+        if (hot.getActiveEditor()) {
+          hot.getActiveEditor().beginEditing();
+          setIsEditMode(true);
+        }
+      }, 10);
     }
-  }, []);
+  }
+}, []);
 
   // 選択範囲の統計情報を更新
   const updateCellSelectionStats = (row, col, row2, col2) => {
