@@ -1,0 +1,93 @@
+/* ヘルプダイアログのスタイル */
+.help-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+}
+
+.help-dialog {
+  width: 600px;
+  max-width: 90vw;
+  max-height: 80vh;
+  background-color: white;
+  border-radius: 5px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+}
+
+.help-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #eee;
+}
+
+.help-dialog-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.help-dialog-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: #666;
+}
+
+.help-dialog-content {
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.help-dialog-content h3 {
+  margin-top: 16px;
+  margin-bottom: 8px;
+  font-size: 16px;
+}
+
+.help-dialog-content p {
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.help-dialog-content ul {
+  padding-left: 20px;
+  margin-bottom: 16px;
+}
+
+.help-dialog-content li {
+  margin-bottom: 6px;
+  line-height: 1.5;
+}
+
+.shortcuts-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.shortcuts-table th,
+.shortcuts-table td {
+  border: 1px solid #ddd;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.shortcuts-table th {
+  background-color: #f5f5f5;
+  font-weight: 600;
+}
+
+.shortcuts-table tr:nth-child(even) {
+  background-color: #f9f9f9;
+}

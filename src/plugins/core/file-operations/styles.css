@@ -1,0 +1,139 @@
+/* ファイル操作ダイアログ用のスタイル */
+.file-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+}
+
+.file-dialog {
+  width: 500px;
+  max-width: 90vw;
+  background-color: white;
+  border-radius: 6px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+}
+
+.file-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #eee;
+}
+
+.file-dialog-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.file-dialog-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: #666;
+}
+
+.file-dialog-content {
+  padding: 16px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.file-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 16px;
+  border-top: 1px solid #eee;
+  gap: 10px;
+}
+
+.file-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  margin-bottom: 10px;
+}
+
+.file-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid #eee;
+}
+
+.file-item:last-child {
+  border-bottom: none;
+}
+
+.file-item:hover {
+  background-color: #f5f5f5;
+}
+
+.file-item.selected {
+  background-color: #e3f2fd;
+}
+
+.file-form-group {
+  margin-bottom: 15px;
+}
+
+.file-form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: 500;
+}
+
+.file-input, 
+.file-form-group select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.file-dialog button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.file-dialog-cancel {
+  background-color: #f5f5f5;
+  color: #333;
+}
+
+.file-dialog-cancel:hover {
+  background-color: #e5e5e5;
+}
+
+.file-dialog-open,
+.file-dialog-save,
+.file-dialog-import {
+  background-color: #1976d2;
+  color: white;
+}
+
+.file-dialog-open:hover,
+.file-dialog-save:hover,
+.file-dialog-import:hover {
+  background-color: #1565c0;
+}
+
+.file-dialog button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}

@@ -1,0 +1,27 @@
+/* 書式設定プラグイン用のスタイル */
+.format-button {
+  background-color: transparent;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  padding: 4px 8px;
+  cursor: pointer;
+  margin: 0 2px;
+}
+
+.format-button:hover {
+  background-color: #f0f0f0;
+}
+
+.format-button.active {
+  background-color: #e3f2fd;
+  color: #1976d2;
+}
+
+.format-divider {
+  display: inline-block;
+  width: 1px;
+  height: 24px;
+  background-color: #ddd;
+  margin: 0 5px;
+  vertical-align: middle;
+}

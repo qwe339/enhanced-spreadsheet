@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { HotTable } from '@handsontable/react';
 import { registerAllModules } from 'handsontable/registry';
 import 'handsontable/dist/handsontable.full.min.css';
@@ -29,7 +29,7 @@ const numToLetter = (num) => {
   return result;
 };
 
-const SpreadsheetEditor = () => {
+const SpreadsheetEditor = forwardRef((props, ref) => {
   // 初期データ（空のグリッド）
   const createEmptyData = () => Array(50).fill().map(() => Array(26).fill(''));
   
@@ -49,6 +49,102 @@ const SpreadsheetEditor = () => {
     count: 0,
     selection: ''
   });
+  
+  // メニュー項目
+  const menuItems = [
+    {
+      id: 'file',
+      label: 'ファイル',
+      items: [
+        { id: 'new', label: '新規作成' },
+        { id: 'open', label: '開く...' },
+        { id: 'save', label: '保存' },
+        { id: 'saveAs', label: '名前を付けて保存...' },
+        { type: 'separator' },
+        { id: 'importCSV', label: 'CSVインポート...' },
+        { id: 'exportCSV', label: 'CSVエクスポート' },
+        { type: 'separator' },
+        { id: 'print', label: '印刷...' }
+      ]
+    },
+    {
+      id: 'edit',
+      label: '編集',
+      items: [
+        { id: 'undo', label: '元に戻す' },
+        { id: 'redo', label: 'やり直し' },
+        { type: 'separator' },
+        { id: 'cut', label: '切り取り' },
+        { id: 'copy', label: 'コピー' },
+        { id: 'paste', label: '貼り付け' },
+        { type: 'separator' },
+        { id: 'search', label: '検索と置換...' }
+      ]
+    },
+    {
+      id: 'insert',
+      label: '挿入',
+      items: [
+        { id: 'insertRow', label: '行を挿入' },
+        { id: 'insertColumn', label: '列を挿入' },
+        { type: 'separator' },
+        { id: 'insertChart', label: 'グラフ...' },
+        { id: 'insertImage', label: '画像...' }
+      ]
+    },
+    {
+      id: 'data',
+      label: 'データ',
+      items: [
+        { id: 'sort', label: '並べ替え...' },
+        { id: 'filter', label: 'フィルター' },
+        { type: 'separator' },
+        { id: 'dataValidation', label: 'データの入力規則...' }
+      ]
+    },
+    {
+      id: 'format',
+      label: '書式',
+      items: [
+        { id: 'formatCell', label: 'セルの書式...' },
+        { type: 'separator' },
+        { id: 'bold', label: '太字' },
+        { id: 'italic', label: '斜体' },
+        { id: 'underline', label: '下線' },
+        { type: 'separator' },
+        { id: 'alignLeft', label: '左揃え' },
+        { id: 'alignCenter', label: '中央揃え' },
+        { id: 'alignRight', label: '右揃え' },
+        { type: 'separator' },
+        { id: 'conditionalFormat', label: '条件付き書式...' }
+      ]
+    },
+    {
+      id: 'help',
+      label: 'ヘルプ',
+      items: [
+        { id: 'about', label: 'バージョン情報' },
+        { id: 'shortcuts', label: 'キーボードショートカット' }
+      ]
+    }
+  ];
+  
+  // ツールバーアイテム
+  const toolbarItems = [
+    { id: 'new', tooltip: '新規作成', icon: '📄' },
+    { id: 'save', tooltip: '保存', icon: '💾' },
+    { type: 'separator' },
+    { id: 'undo', tooltip: '元に戻す', icon: '↩️' },
+    { id: 'redo', tooltip: 'やり直し', icon: '↪️' },
+    { type: 'separator' },
+    { id: 'bold', tooltip: '太字', icon: 'B' },
+    { id: 'italic', tooltip: '斜体', icon: 'I' },
+    { id: 'underline', tooltip: '下線', icon: 'U' },
+    { type: 'separator' },
+    { id: 'alignLeft', tooltip: '左揃え', icon: '⬅️' },
+    { id: 'alignCenter', tooltip: '中央揃え', icon: '⬅️➡️' },
+    { id: 'alignRight', tooltip: '右揃え', icon: '➡️' }
+  ];
   
   // ホットテーブルへの参照
   const hotRef = useRef(null);
@@ -74,6 +170,23 @@ const SpreadsheetEditor = () => {
   useEffect(() => {
     document.title = `${isModified ? '*' : ''}${fileName} - 拡張スプレッドシート`;
   }, [fileName, isModified]);
+  
+  // ref経由でメソッドを公開
+  useImperativeHandle(ref, () => ({
+    // 新規ファイル作成
+    createNewFile: createNewFile,
+    // データの保存
+    saveFile: saveFile,
+    // Handsontableインスタンスの取得
+    getHotInstance: () => hotRef.current?.hotInstance,
+    // プラグイン用のフック
+    applyPluginHook: (hookName, ...args) => {
+      if (props.onPluginHook) {
+        return props.onPluginHook(hookName, ...args);
+      }
+      return null;
+    }
+  }));
   
   // セル選択時の処理
   const handleSelection = (row, column, row2, column2) => {
@@ -151,6 +264,9 @@ const SpreadsheetEditor = () => {
     changes.forEach(([row, col, oldValue, newValue]) => {
       if (row >= 0 && col >= 0 && row < newData.length && col < newData[0].length) {
         newData[row][col] = newValue;
+        
+        // デバッグ用出力
+        console.log(`セル変更: [${row},${col}] ${oldValue} -> ${newValue}`);
       }
     });
     
@@ -170,6 +286,7 @@ const SpreadsheetEditor = () => {
     if (!hot || !selectedCell) return;
     
     const { row, col } = selectedCell;
+    console.log(`数式バーから値を設定: [${row},${col}] = "${cellValue}"`);
     hot.setDataAtCell(row, col, cellValue);
   };
   
@@ -217,6 +334,15 @@ const SpreadsheetEditor = () => {
   
   // メニュー項目クリック
   const handleMenuItemClick = (menuId) => {
+    console.log(`メニュー項目クリック: ${menuId}`);
+    
+    // プラグインフックの実行
+    if (props.onPluginHook) {
+      const handled = props.onPluginHook('menu:click', menuId);
+      if (handled) return;
+    }
+    
+    // 標準処理
     switch (menuId) {
       case 'new':
         createNewFile();
@@ -225,7 +351,7 @@ const SpreadsheetEditor = () => {
         saveFile();
         break;
       case 'about':
-        setStatusMessage('機能 "about" は実装中です');
+        alert('拡張スプレッドシート Version 0.1.0\nプラグインアーキテクチャ対応版');
         break;
       default:
         setStatusMessage(`機能 "${menuId}" は実装中です`);
@@ -235,7 +361,36 @@ const SpreadsheetEditor = () => {
   
   // ツールバーのボタンクリック
   const handleToolbarClick = (action) => {
-    setStatusMessage(`ツールバー操作 "${action}" は実装中です`);
+    console.log(`ツールバーボタンクリック: ${action}`);
+    
+    // プラグインフックの実行
+    if (props.onPluginHook) {
+      const handled = props.onPluginHook('toolbar:click', action);
+      if (handled) return;
+    }
+    
+    // 標準処理
+    switch (action) {
+      case 'new':
+        createNewFile();
+        break;
+      case 'save':
+        saveFile();
+        break;
+      case 'undo':
+        if (hotRef.current?.hotInstance) {
+          hotRef.current.hotInstance.undo();
+        }
+        break;
+      case 'redo':
+        if (hotRef.current?.hotInstance) {
+          hotRef.current.hotInstance.redo();
+        }
+        break;
+      default:
+        setStatusMessage(`ツールバー操作 "${action}" は実装中です`);
+        break;
+    }
   };
   
   return (
@@ -247,19 +402,14 @@ const SpreadsheetEditor = () => {
         </div>
       </div>
       
-      <MenuBar onMenuItemClick={handleMenuItemClick} />
+      <MenuBar 
+        items={menuItems} 
+        onMenuItemClick={handleMenuItemClick} 
+      />
       
       <Toolbar 
-        onNew={createNewFile}
-        onSave={saveFile}
-        onUndo={() => handleToolbarClick('undo')}
-        onRedo={() => handleToolbarClick('redo')}
-        onApplyBold={() => handleToolbarClick('bold')}
-        onApplyItalic={() => handleToolbarClick('italic')}
-        onApplyUnderline={() => handleToolbarClick('underline')}
-        onAlignLeft={() => handleToolbarClick('alignLeft')}
-        onAlignCenter={() => handleToolbarClick('alignCenter')}
-        onAlignRight={() => handleToolbarClick('alignRight')}
+        items={toolbarItems}
+        onClick={handleToolbarClick}
       />
       
       <FormulaBar 
@@ -297,6 +447,20 @@ const SpreadsheetEditor = () => {
           className="handsontable-grid"
           afterSelectionEnd={handleSelection}
           afterChange={handleDataChange}
+          cells={(row, col, prop) => {
+            // カスタムセルプロパティを追加
+            const cellProps = {};
+            
+            // プラグインによるセルプロパティのカスタマイズ
+            if (props.onPluginHook) {
+              const customProps = props.onPluginHook('cell:properties', row, col, data[row]?.[col]);
+              if (customProps) {
+                Object.assign(cellProps, customProps);
+              }
+            }
+            
+            return cellProps;
+          }}
         />
       </div>
       
@@ -313,6 +477,8 @@ const SpreadsheetEditor = () => {
       />
     </div>
   );
-};
+});
+
+SpreadsheetEditor.displayName = 'SpreadsheetEditor';
 
 export default SpreadsheetEditor;
