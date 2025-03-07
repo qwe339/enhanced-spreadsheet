@@ -29,33 +29,38 @@ const SpreadsheetEditorWithPlugins = ({
     confirmButtonText: '確認'
   });
   
-  // 未保存の変更がある場合にページを離れる前に警告
-  useEffect(() => {
-    const handleBeforeUnload = (e) => {
-      if (state.isModified) {
-        e.preventDefault();
-        e.returnValue = '未保存の変更があります。ページを離れますか？';
-        return e.returnValue;
+// setupEventListeners 内に新しいイベントリスナーを追加
+useEffect(() => {
+    // CSV読み込みイベント
+    const handleImportCSVData = (e) => {
+      const { data } = e.detail || {};
+      if (data && Array.isArray(data)) {
+        // Handsontableインスタンスを取得
+        const hotInstance = editorRef.current?.getHotInstance();
+        
+        if (hotInstance) {
+          // データをロード
+          hotInstance.loadData(data);
+          
+          // 変更フラグを設定
+          dispatch({ type: actionTypes.SET_MODIFIED, payload: true });
+          
+          // ステータスメッセージを更新
+          if (editorRef.current) {
+            editorRef.current.updateStatusMessage('CSVデータをインポートしました', 3000);
+          }
+        }
       }
     };
     
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    // イベントリスナーを登録
+    document.addEventListener('spreadsheet-import-csv', handleImportCSVData);
     
+    // クリーンアップ
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('spreadsheet-import-csv', handleImportCSVData);
     };
-  }, [state.isModified]);
-  
-  // 確認ダイアログを表示する関数
-  const showConfirm = (title, message, onConfirm, confirmButtonText = '確認') => {
-    setConfirmDialogConfig({
-      title,
-      message,
-      onConfirm,
-      confirmButtonText
-    });
-    setShowConfirmDialog(true);
-  };
+  }, [dispatch, actionTypes]);
   
   // プラグインフックハンドラ
   const handlePluginHook = (hookName, ...args) => {
@@ -80,20 +85,15 @@ const SpreadsheetEditorWithPlugins = ({
           return true;
         }
         
+        if (menuId === 'importCSV') {
+          document.dispatchEvent(new CustomEvent('file-import-csv'));
+          return true;
+        }
+        
         const results = pluginRegistry.runHook('menu:click', menuId);
         return results && results.some(result => result === true);
       
-      case 'toolbar:click':
-        // ツールバークリックイベントをプラグインに通知
-        const toolbarId = args[0];
-        const toolbarResults = pluginRegistry.runHook('toolbar:click', toolbarId);
-        return toolbarResults && toolbarResults.some(result => result === true);
-      
-      case 'cell:properties':
-        // セルプロパティをカスタマイズ
-        const [row, col, value] = args;
-        const cellResults = pluginRegistry.runHook('cell:properties', row, col, value);
-        return cellResults ? cellResults[cellResults.length - 1] : null;
+      // 他のcase...
       
       default:
         return null;
@@ -221,11 +221,35 @@ const SpreadsheetEditorWithPlugins = ({
     }
   };
   
-  // CSVエクスポート
-  const handleExportCSV = (hotInstance) => {
-    console.log('CSV Export triggered');
-    pluginRegistry.runHook('exportCSV', hotInstance);
-  };
+// CSVインポート処理
+const handleImportCSV = (data) => {
+  if (!data || !Array.isArray(data)) {
+    alert('インポートするデータがありません');
+    return;
+  }
+  
+  // Handsontableインスタンスを取得
+  const hotInstance = editorRef.current?.getHotInstance();
+  
+  if (hotInstance) {
+    // データをロード
+    hotInstance.loadData(data);
+    
+    // 変更フラグを設定
+    dispatch({ type: actionTypes.SET_MODIFIED, payload: true });
+    
+    // ステータスメッセージを更新
+    if (editorRef.current) {
+      editorRef.current.updateStatusMessage('CSVデータをインポートしました', 3000);
+    }
+  }
+};
+
+// CSVエクスポート
+const handleExportCSV = (hotInstance) => {
+  console.log('CSV Export triggered');
+  pluginRegistry.runHook('exportCSV', hotInstance);
+};
   
   // ローカルストレージにデータを保存
   const saveToLocalStorage = (filename) => {

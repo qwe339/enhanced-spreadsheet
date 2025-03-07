@@ -1,3 +1,4 @@
+/* src/styles/FormulaBar.css */
 .formula-bar {
   display: flex;
   align-items: center;
@@ -41,6 +42,7 @@
   border: 1px solid #e0e0e0;
   border-radius: 3px;
   padding: 0 8px;
+  position: relative;
 }
 
 .formula-label {
@@ -51,8 +53,13 @@
   font-style: italic;
 }
 
-.formula-input {
+.formula-input-wrapper {
+  position: relative;
   flex-grow: 1;
+}
+
+.formula-input {
+  width: 100%;
   border: none;
   outline: none;
   padding: 6px 0;
@@ -78,4 +85,44 @@
 
 .formula-submit-button:hover {
   background-color: #1565c0;
+}
+
+.formula-suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 100%;
+  max-height: 200px;
+  overflow-y: auto;
+  background-color: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 3px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+}
+
+.suggestion-item {
+  padding: 6px 10px;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.suggestion-item.highlighted {
+  background-color: #e3f2fd;
+}
+
+.suggestion-name {
+  font-weight: 600;
+  font-family: 'Consolas', 'Monaco', monospace;
+  color: #1976d2;
+}
+
+.suggestion-description {
+  font-size: 12px;
+  color: #666;
+  margin-top: 2px;
 }

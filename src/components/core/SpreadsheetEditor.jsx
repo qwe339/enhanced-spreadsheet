@@ -28,6 +28,9 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
   const createEmptyData = () => Array(50).fill().map(() => Array(26).fill(''));
   
   // 状態管理
+  const [allSheets, setAllSheets] = useState({
+    'Sheet1': createEmptyData()
+  });
   const [data, setData] = useState(createEmptyData());
   const [selectedCell, setSelectedCell] = useState({ row: 0, col: 0 });
   const [cellValue, setCellValue] = useState('');
@@ -45,6 +48,8 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
   });
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [hyperformulaInstance, setHyperformulaInstance] = useState(null);
+  const [cellStyles, setCellStyles] = useState({});
+  const [cellFormulas, setCellFormulas] = useState({});
   
   // メニュー項目
   const menuItems = [
@@ -163,15 +168,34 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
     
     window.addEventListener('resize', handleResize);
     
-    // HyperFormulaの初期化
-    const hfInstance = createHyperFormula(data);
-    setHyperformulaInstance(hfInstance);
+    // 各シート用にHyperFormulaを初期化
+    initializeHyperFormula();
     
     // クリーンアップ関数
     return () => {
       window.removeEventListener('resize', handleResize);
+      
+      // HyperFormula インスタンスをクリーンアップ
+      if (hyperformulaInstance) {
+        hyperformulaInstance.destroy();
+      }
     };
   }, []);
+  
+  // HyperFormulaの初期化
+  const initializeHyperFormula = () => {
+    const hfInstance = createHyperFormula(allSheets[currentSheetName]);
+    
+    // 各シートを追加
+    sheets.forEach(sheetName => {
+      if (sheetName !== 'Sheet1') { // Sheet1は初期化時に作成済み
+        hfInstance.addSheet(sheetName);
+        hfInstance.setSheetContent(sheetName, allSheets[sheetName] || createEmptyData());
+      }
+    });
+    
+    setHyperformulaInstance(hfInstance);
+  };
   
   // ページタイトルの更新
   useEffect(() => {
@@ -244,6 +268,34 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
     getHotInstance: () => hotRef.current?.hotInstance,
     // HyperFormulaインスタンスの取得
     getHyperFormulaInstance: () => hyperformulaInstance,
+    // 現在のシートデータを取得
+    getAllSheetData: () => allSheets,
+    // シート一覧を取得
+    getSheets: () => sheets,
+    // 現在のシート名を取得
+    getCurrentSheet: () => currentSheetName,
+    // ファイル名を設定
+    setFilename: (name) => setFileName(name),
+    // シートを更新
+    updateSheets: (newSheets) => {
+      setSheets(newSheets);
+      
+      // 新しいシートのデータを初期化
+      const newAllSheets = { ...allSheets };
+      newSheets.forEach(sheet => {
+        if (!newAllSheets[sheet]) {
+          newAllSheets[sheet] = createEmptyData();
+        }
+      });
+      
+      setAllSheets(newAllSheets);
+    },
+    // 特定のシートに切り替え
+    switchToSheet: (sheetName) => {
+      if (sheets.includes(sheetName)) {
+        handleSheetChange(sheetName);
+      }
+    },
     // プラグイン用のフック
     applyPluginHook: (hookName, ...args) => {
       if (props.onPluginHook) {
@@ -268,7 +320,12 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
     const hot = hotRef.current?.hotInstance;
     if (hot) {
       const value = hot.getDataAtCell(row, column);
-      setCellValue(value !== null && value !== undefined ? String(value) : '');
+      
+      // セル内容が数式かどうかをチェック
+      const cellKey = `${currentSheetName}:${row},${column}`;
+      const formula = cellFormulas[cellKey];
+      
+      setCellValue(formula || (value !== null && value !== undefined ? String(value) : ''));
     }
     
     // 選択範囲の統計を更新
@@ -326,18 +383,28 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
     
     // データ更新
     const newData = [...data];
+    const newFormulas = { ...cellFormulas };
+    
     changes.forEach(([row, col, oldValue, newValue]) => {
       if (row >= 0 && col >= 0 && row < newData.length && col < newData[0].length) {
+        const cellKey = `${currentSheetName}:${row},${col}`;
+        
         // 数式処理
         if (typeof newValue === 'string' && newValue.startsWith('=')) {
+          // 数式を保存
+          newFormulas[cellKey] = newValue;
+          
           if (hyperformulaInstance) {
             try {
+              // 数式を評価
               const result = evaluateFormula(
                 hyperformulaInstance,
                 newValue,
                 { sheet: currentSheetName, row, col }
               );
-              newData[row][col] = newValue; // 元の数式を保存
+              
+              // 表示用に結果を設定（内部では数式を保持）
+              newData[row][col] = result;
               
               // HyperFormulaの更新
               updateHyperFormula(
@@ -350,10 +417,15 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
               newData[row][col] = '#ERROR!';
             }
           } else {
-            newData[row][col] = newValue;
+            newData[row][col] = '#NO_ENGINE!';
           }
         } else {
           newData[row][col] = newValue;
+          
+          // 以前に数式があれば削除
+          if (newFormulas[cellKey]) {
+            delete newFormulas[cellKey];
+          }
           
           // HyperFormulaの更新
           if (hyperformulaInstance) {
@@ -370,7 +442,15 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
       }
     });
     
+    // 現在のシートデータを更新
     setData(newData);
+    setCellFormulas(newFormulas);
+    
+    // 全シートのデータを更新
+    const updatedSheets = { ...allSheets };
+    updatedSheets[currentSheetName] = newData;
+    setAllSheets(updatedSheets);
+    
     setIsModified(true);
     setStatusMessage('変更あり');
   };
@@ -397,11 +477,17 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
       if (!confirmed) return;
     }
     
+    // 初期シートデータ
     const emptyData = createEmptyData();
+    const initialSheets = { 'Sheet1': emptyData };
+    
+    setAllSheets(initialSheets);
     setData(emptyData);
     setFileName('新しいスプレッドシート');
     setCurrentSheetName('Sheet1');
     setSheets(['Sheet1']);
+    setCellStyles({});
+    setCellFormulas({});
     setIsModified(false);
     setStatusMessage('新しいファイルを作成しました');
     
@@ -419,7 +505,7 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
     setHyperformulaInstance(newHfInstance);
   };
   
-  // ファイル保存（ダミー実装）
+  // ファイル保存
   const saveFile = () => {
     setIsModified(false);
     setStatusMessage('ファイルを保存しました');
@@ -427,29 +513,169 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
       fileName,
       currentSheet: currentSheetName,
       sheets,
-      data
+      allSheets,
+      cellStyles,
+      cellFormulas
     };
   };
   
   // シート切り替え
   const handleSheetChange = (sheetName) => {
-    setCurrentSheetName(sheetName);
-    setStatusMessage(`シート "${sheetName}" に切り替えました`);
+    if (!sheets.includes(sheetName) || sheetName === currentSheetName) return;
     
-    // TODO: シートデータの切り替え処理を追加
+    // 現在のシートデータを保存
+    const updatedSheets = { ...allSheets };
+    updatedSheets[currentSheetName] = data;
+    
+    // 新しいシートに切り替え
+    setCurrentSheetName(sheetName);
+    setData(updatedSheets[sheetName] || createEmptyData());
+    
+    // ホットテーブルのデータを更新
+    const hot = hotRef.current?.hotInstance;
+    if (hot) {
+      hot.loadData(updatedSheets[sheetName] || createEmptyData());
+    }
+    
+    setStatusMessage(`シート "${sheetName}" に切り替えました`);
   };
   
   // シート追加
   const handleAddSheet = () => {
     const newSheetName = `Sheet${sheets.length + 1}`;
-    setSheets([...sheets, newSheetName]);
+    const newSheets = [...sheets, newSheetName];
+    setSheets(newSheets);
+    
+    // 新しいシートのデータを初期化
+    const updatedSheets = { ...allSheets };
+    updatedSheets[newSheetName] = createEmptyData();
+    setAllSheets(updatedSheets);
+    
+    // 新しいシートに切り替え
     setCurrentSheetName(newSheetName);
-    setStatusMessage(`シート "${newSheetName}" を追加しました`);
+    setData(updatedSheets[newSheetName]);
+    
+    // ホットテーブルのデータを更新
+    const hot = hotRef.current?.hotInstance;
+    if (hot) {
+      hot.loadData(updatedSheets[newSheetName]);
+    }
     
     // HyperFormulaにシートを追加
     if (hyperformulaInstance) {
       hyperformulaInstance.addSheet(newSheetName);
     }
+    
+    setIsModified(true);
+    setStatusMessage(`シート "${newSheetName}" を追加しました`);
+  };
+  
+  // シート名変更
+  const handleRenameSheet = (oldName, newName) => {
+    if (!sheets.includes(oldName) || sheets.includes(newName)) return;
+    
+    const sheetIndex = sheets.indexOf(oldName);
+    const newSheets = [...sheets];
+    newSheets[sheetIndex] = newName;
+    
+    // シートデータをコピー
+    const updatedSheets = { ...allSheets };
+    updatedSheets[newName] = updatedSheets[oldName];
+    delete updatedSheets[oldName];
+    
+    // セルスタイルとフォーミュラを更新
+    const newStyles = {};
+    const newFormulas = {};
+    
+    Object.keys(cellStyles).forEach(key => {
+      if (key.startsWith(`${oldName}:`)) {
+        const newKey = key.replace(`${oldName}:`, `${newName}:`);
+        newStyles[newKey] = cellStyles[key];
+      } else {
+        newStyles[key] = cellStyles[key];
+      }
+    });
+    
+    Object.keys(cellFormulas).forEach(key => {
+      if (key.startsWith(`${oldName}:`)) {
+        const newKey = key.replace(`${oldName}:`, `${newName}:`);
+        newFormulas[newKey] = cellFormulas[key];
+      } else {
+        newFormulas[key] = cellFormulas[key];
+      }
+    });
+    
+    // 状態を更新
+    setSheets(newSheets);
+    setAllSheets(updatedSheets);
+    setCellStyles(newStyles);
+    setCellFormulas(newFormulas);
+    
+    // 現在のシートが名前変更対象だった場合
+    if (currentSheetName === oldName) {
+      setCurrentSheetName(newName);
+    }
+    
+    // HyperFormulaの更新（シート名変更はサポートされていないので再作成）
+    if (hyperformulaInstance) {
+      hyperformulaInstance.destroy();
+      initializeHyperFormula();
+    }
+    
+    setIsModified(true);
+    setStatusMessage(`シート名を "${oldName}" から "${newName}" に変更しました`);
+  };
+  
+  // シート削除
+  const handleDeleteSheet = (sheetName) => {
+    if (!sheets.includes(sheetName) || sheets.length <= 1) return;
+    
+    // 削除するシートが現在のシートかチェック
+    if (currentSheetName === sheetName) {
+      // 別のシートに切り替え
+      const nextSheet = sheets.find(s => s !== sheetName) || 'Sheet1';
+      handleSheetChange(nextSheet);
+    }
+    
+    // シートリストから削除
+    const newSheets = sheets.filter(s => s !== sheetName);
+    setSheets(newSheets);
+    
+    // シートデータの削除
+    const updatedSheets = { ...allSheets };
+    delete updatedSheets[sheetName];
+    setAllSheets(updatedSheets);
+    
+    // シートに関連するセルスタイルとフォーミュラを削除
+    const newStyles = {};
+    const newFormulas = {};
+    
+    Object.keys(cellStyles).forEach(key => {
+      if (!key.startsWith(`${sheetName}:`)) {
+        newStyles[key] = cellStyles[key];
+      }
+    });
+    
+    Object.keys(cellFormulas).forEach(key => {
+      if (!key.startsWith(`${sheetName}:`)) {
+        newFormulas[key] = cellFormulas[key];
+      }
+    });
+    
+    setCellStyles(newStyles);
+    setCellFormulas(newFormulas);
+    
+    // HyperFormulaからシートを削除
+    if (hyperformulaInstance) {
+      try {
+        hyperformulaInstance.removeSheet(sheetName);
+      } catch (error) {
+        console.error('シート削除エラー:', error);
+      }
+    }
+    
+    setIsModified(true);
+    setStatusMessage(`シート "${sheetName}" を削除しました`);
   };
   
   // コピー機能
@@ -590,6 +816,14 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
     const rowIndex = Math.min(startRow, endRow);
     
     hot.alter('insert_row', rowIndex);
+    
+    // 全シートのデータを更新
+    setData(hot.getData());
+    const updatedSheets = { ...allSheets };
+    updatedSheets[currentSheetName] = hot.getData();
+    setAllSheets(updatedSheets);
+    
+    setIsModified(true);
     setStatusMessage(`行${rowIndex + 1}を挿入しました`);
   }
   
@@ -606,7 +840,67 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
     const colIndex = Math.min(startCol, endCol);
     
     hot.alter('insert_col', colIndex);
+    
+    // 全シートのデータを更新
+    setData(hot.getData());
+    const updatedSheets = { ...allSheets };
+    updatedSheets[currentSheetName] = hot.getData();
+    setAllSheets(updatedSheets);
+    
+    setIsModified(true);
     setStatusMessage(`列${numToLetter(colIndex)}を挿入しました`);
+  }
+  
+  // 行の削除
+  function handleDeleteRow() {
+    const hot = hotRef.current?.hotInstance;
+    if (!hot) return;
+    
+    const selectedRanges = hot.getSelected();
+    if (!selectedRanges || selectedRanges.length === 0) return;
+    
+    // 最初の選択範囲を使用
+    const [startRow, startCol, endRow, endCol] = selectedRanges[0];
+    const rowStart = Math.min(startRow, endRow);
+    const rowEnd = Math.max(startRow, endRow);
+    const rowCount = rowEnd - rowStart + 1;
+    
+    hot.alter('remove_row', rowStart, rowCount);
+    
+    // 全シートのデータを更新
+    setData(hot.getData());
+    const updatedSheets = { ...allSheets };
+    updatedSheets[currentSheetName] = hot.getData();
+    setAllSheets(updatedSheets);
+    
+    setIsModified(true);
+    setStatusMessage(`${rowCount}行を削除しました`);
+  }
+  
+  // 列の削除
+  function handleDeleteColumn() {
+    const hot = hotRef.current?.hotInstance;
+    if (!hot) return;
+    
+    const selectedRanges = hot.getSelected();
+    if (!selectedRanges || selectedRanges.length === 0) return;
+    
+    // 最初の選択範囲を使用
+    const [startRow, startCol, endRow, endCol] = selectedRanges[0];
+    const colStart = Math.min(startCol, endCol);
+    const colEnd = Math.max(startCol, endCol);
+    const colCount = colEnd - colStart + 1;
+    
+    hot.alter('remove_col', colStart, colCount);
+    
+    // 全シートのデータを更新
+    setData(hot.getData());
+    const updatedSheets = { ...allSheets };
+    updatedSheets[currentSheetName] = hot.getData();
+    setAllSheets(updatedSheets);
+    
+    setIsModified(true);
+    setStatusMessage(`${colCount}列を削除しました`);
   }
   
   // 印刷機能
@@ -630,6 +924,32 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
           top: 0;
           width: 100%;
         }
+        .handsontable th, .handsontable td {
+          border: 1px solid #000 !important;
+        }
+        .handsontable .htCore th.htNoFrame, .handsontable .htCore td.htNoFrame {
+          border: none !important;
+        }
+        .handsontable .htCore th.currentRow, .handsontable .htCore td.currentRow {
+          background-color: transparent !important;
+        }
+        .handsontable .htCore th.currentCol, .handsontable .htCore td.currentCol {
+          background-color: transparent !important;
+        }
+        /* シート名とファイル名を印刷用に追加 */
+        .spreadsheet-grid-container::before {
+          content: "${fileName} - ${currentSheetName}";
+          visibility: visible;
+          display: block;
+          text-align: center;
+          font-size: 14pt;
+          margin-bottom: 10px;
+        }
+        /* ページ設定 */
+        @page {
+          size: landscape;
+          margin: 1cm;
+        }
       }
     `;
     document.head.appendChild(originalStyles);
@@ -643,11 +963,82 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
   
   // 書式適用
   function applyFormat(format, value) {
-    // プラグインフックを実行
-    const hookResult = props.onPluginHook && props.onPluginHook('format:apply', { format, value });
+    const hot = hotRef.current?.hotInstance;
+    if (!hot) return;
     
-    if (!hookResult) {
-      setStatusMessage(`書式 "${format}" の適用はプラグインで処理される必要があります`);
+    const selectedRanges = hot.getSelected();
+    if (!selectedRanges || selectedRanges.length === 0) {
+      setStatusMessage('適用するセルを選択してください');
+      return;
+    }
+    
+    // 新しいスタイル情報
+    const newStyles = { ...cellStyles };
+    
+    // 各選択範囲に書式を適用
+    for (const range of selectedRanges) {
+      const [startRow, startCol, endRow, endCol] = range;
+      const rowStart = Math.min(startRow, endRow);
+      const rowEnd = Math.max(startRow, endRow);
+      const colStart = Math.min(startCol, endCol);
+      const colEnd = Math.max(startCol, endCol);
+      
+      // 範囲内の各セルに書式を適用
+      for (let row = rowStart; row <= rowEnd; row++) {
+        for (let col = colStart; col <= colEnd; col++) {
+          const cellKey = `${currentSheetName}:${row},${col}`;
+          const currentStyle = newStyles[cellKey] || {};
+          
+          // 書式タイプに応じて更新
+          switch (format) {
+            case 'bold':
+              currentStyle.fontWeight = currentStyle.fontWeight === 'bold' ? 'normal' : 'bold';
+              break;
+            case 'italic':
+              currentStyle.fontStyle = currentStyle.fontStyle === 'italic' ? 'normal' : 'italic';
+              break;
+            case 'underline':
+              currentStyle.textDecoration = currentStyle.textDecoration === 'underline' ? 'none' : 'underline';
+              break;
+            case 'align':
+              currentStyle.textAlign = value;
+              break;
+            case 'fontSize':
+              currentStyle.fontSize = value;
+              break;
+            case 'color':
+              currentStyle.color = value;
+              break;
+            case 'backgroundColor':
+              currentStyle.backgroundColor = value;
+              break;
+            default:
+              console.warn(`未対応の書式: ${format}`);
+              break;
+          }
+          
+          // 空のスタイルは削除、そうでなければ更新
+          if (Object.keys(currentStyle).length === 0) {
+            delete newStyles[cellKey];
+          } else {
+            newStyles[cellKey] = currentStyle;
+          }
+        }
+      }
+    }
+    
+    // スタイルを更新
+    setCellStyles(newStyles);
+    
+    // セルをレンダリングし直す
+    hot.render();
+    
+    setIsModified(true);
+    setStatusMessage('書式を適用しました');
+    
+    // プラグインフックを実行（オプション）
+    if (props.onPluginHook) {
+      props.onPluginHook('format:apply', { format, value });
     }
   }
   
@@ -826,6 +1217,12 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
       case 'insertColumn':
         handleInsertColumn();
         break;
+      case 'deleteRow':
+        handleDeleteRow();
+        break;
+      case 'deleteColumn':
+        handleDeleteColumn();
+        break;
       case 'print':
         handlePrint();
         break;
@@ -878,6 +1275,59 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
         handleMenuItemClick(action);
         break;
     }
+  };
+  
+  // セルのスタイルを適用
+  const getCellProperties = (row, col) => {
+    // セルキー
+    const cellKey = `${currentSheetName}:${row},${col}`;
+    const style = cellStyles[cellKey];
+    
+    if (!style) return null;
+    
+    // Handsontableに適用するプロパティ
+    const properties = {};
+    
+    // スタイルプロパティの変換
+    if (style.fontWeight) properties.fontWeight = style.fontWeight;
+    if (style.fontStyle) properties.fontStyle = style.fontStyle;
+    if (style.textDecoration) properties.textDecoration = style.textDecoration;
+    if (style.textAlign) properties.textAlign = style.textAlign;
+    if (style.fontSize) properties.fontSize = style.fontSize;
+    if (style.color) properties.color = style.color;
+    if (style.backgroundColor) properties.backgroundColor = style.backgroundColor;
+    
+    // クラス名の生成
+    let className = '';
+    if (style.fontWeight === 'bold') className += ' font-bold';
+    if (style.fontStyle === 'italic') className += ' font-italic';
+    if (style.textDecoration === 'underline') className += ' text-underline';
+    if (style.textAlign) className += ` text-${style.textAlign}`;
+    if (style.fontSize) className += ` text-${style.fontSize}`;
+    
+    if (className) properties.className = className.trim();
+    
+    return properties;
+  };
+  
+  // プラグインによるセルプロパティのカスタマイズを追加
+  const getCustomizedCellProperties = (row, col) => {
+    // 基本スタイル
+    const baseProps = getCellProperties(row, col) || {};
+    
+    // プラグインによるカスタマイズ
+    if (props.onPluginHook) {
+      const customProps = props.onPluginHook('cell:properties', row, col, data[row]?.[col]);
+      if (customProps) {
+        // クラス名の結合
+        if (customProps.className && baseProps.className) {
+          customProps.className = `${baseProps.className} ${customProps.className}`;
+        }
+        return { ...baseProps, ...customProps };
+      }
+    }
+    
+    return baseProps;
   };
   
   return (
@@ -935,20 +1385,7 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
           afterSelectionEnd={handleSelection}
           afterChange={handleDataChange}
           undo={true}
-          cells={(row, col, prop) => {
-            // カスタムセルプロパティを追加
-            const cellProps = {};
-            
-            // プラグインによるセルプロパティのカスタマイズ
-            if (props.onPluginHook) {
-              const customProps = props.onPluginHook('cell:properties', row, col, data[row]?.[col]);
-              if (customProps) {
-                Object.assign(cellProps, customProps);
-              }
-            }
-            
-            return cellProps;
-          }}
+          cells={(row, col, prop) => getCustomizedCellProperties(row, col)}
         />
       </div>
       
@@ -957,6 +1394,8 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
         currentSheet={currentSheetName}
         onSheetChange={handleSheetChange}
         onAddSheet={handleAddSheet}
+        onRenameSheet={handleRenameSheet}
+        onDeleteSheet={handleDeleteSheet}
       />
       
       <StatusBar

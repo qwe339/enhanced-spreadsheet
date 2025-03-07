@@ -1,6 +1,9 @@
+// src/plugins/core/file-operations/index.js
 import FileOperationsDialog from './FileOperationsDialog';
 import './styles.css';
 import Papa from 'papaparse';
+import { createRoot } from 'react-dom/client';
+import React from 'react';
 
 const fileOperationsPlugin = {
   name: 'ファイル操作',
@@ -14,6 +17,9 @@ const fileOperationsPlugin = {
     // ダイアログを初期化
     this.dialog = new FileOperationsDialog(this);
     
+    // CSVインポートモーダルのルート要素
+    this.csvImportModalRoot = null;
+    
     // イベントリスナーのセットアップ
     this.setupEventListeners();
   },
@@ -21,6 +27,9 @@ const fileOperationsPlugin = {
   cleanup() {
     // イベントリスナーのクリーンアップ
     this.removeEventListeners();
+    
+    // モーダルのクリーンアップ
+    this.removeCSVImportModal();
   },
   
   setupEventListeners() {
@@ -39,7 +48,7 @@ const fileOperationsPlugin = {
     // CSVインポートイベント
     this.handleImportCSV = () => {
       console.log('CSV import dialog requested');
-      this.dialog.showImportCSVDialog();
+      this.showCSVImportModal();
     };
 
     // 保存イベント
@@ -69,6 +78,67 @@ const fileOperationsPlugin = {
     document.removeEventListener('file-import-csv', this.handleImportCSV);
     document.removeEventListener('spreadsheet-save-data', this.handleSaveFile);
     document.removeEventListener('spreadsheet-load-data', this.handleLoadFile);
+  },
+  
+  // CSVインポートモーダルを表示
+  showCSVImportModal() {
+    // 既存のモーダルを削除
+    this.removeCSVImportModal();
+    
+    // モーダル用のコンテナを作成
+    const modalContainer = document.createElement('div');
+    modalContainer.id = 'csv-import-modal-container';
+    document.body.appendChild(modalContainer);
+    
+    // React要素をレンダリング
+    const CSVImportModal = React.lazy(() => import('../../../components/modals/CSVImportModal'));
+    
+    this.csvImportModalRoot = createRoot(modalContainer);
+    this.csvImportModalRoot.render(
+      <React.Suspense fallback={<div>Loading...</div>}>
+        <CSVImportModal
+          onClose={() => this.removeCSVImportModal()}
+          onImport={(data) => this.importCSVData(data)}
+        />
+      </React.Suspense>
+    );
+  },
+  
+  // CSVインポートモーダルを削除
+  removeCSVImportModal() {
+    if (this.csvImportModalRoot) {
+      this.csvImportModalRoot.unmount();
+      this.csvImportModalRoot = null;
+      
+      const container = document.getElementById('csv-import-modal-container');
+      if (container && container.parentNode) {
+        container.parentNode.removeChild(container);
+      }
+    }
+  },
+  
+  // CSVデータをインポート
+  importCSVData(data) {
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      console.error('インポートするデータがありません');
+      return;
+    }
+    
+    console.log('CSVデータをインポート:', data);
+    
+    // Handsontableインスタンスを取得
+    const hot = this.registry.hotInstance;
+    if (!hot) {
+      console.error('Handsontableインスタンスが見つかりません');
+      return;
+    }
+    
+    // カスタムイベントを発行してエディタにデータを渡す
+    document.dispatchEvent(new CustomEvent('spreadsheet-import-csv', { 
+      detail: { data } 
+    }));
+    
+    this.showStatusMessage('CSVデータをインポートしました');
   },
   
   hooks: {
