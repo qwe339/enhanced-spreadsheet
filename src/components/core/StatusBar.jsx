@@ -1,10 +1,22 @@
 import React from 'react';
 import '../../styles/StatusBar.css';
 
-const StatusBar = ({ message, stats }) => {
+const StatusBar = ({ message, stats, filename, lastSaved, isModified }) => {
+  // 最終保存日時を整形
+  const formattedLastSaved = lastSaved 
+    ? new Date(lastSaved).toLocaleString() 
+    : '未保存';
+  
   return (
     <div className="status-bar">
       <div className="status-message">{message}</div>
+      
+      <div className="status-file-info">
+        <span className="file-name">{filename || '新しいスプレッドシート'}</span>
+        {isModified && <span className="modified-indicator">*</span>}
+        <span className="last-saved">最終保存: {formattedLastSaved}</span>
+      </div>
+      
       <div className="status-stats">
         <div className="stats-item">
           <span className="stats-label">選択:</span>

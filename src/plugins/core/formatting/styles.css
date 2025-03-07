@@ -25,3 +25,80 @@
   margin: 0 5px;
   vertical-align: middle;
 }
+
+/* カスタムクラスベースのスタイル */
+.font-bold {
+  font-weight: bold !important;
+}
+
+.font-italic {
+  font-style: italic !important;
+}
+
+.text-underline {
+  text-decoration: underline !important;
+}
+
+.text-left {
+  text-align: left !important;
+}
+
+.text-center {
+  text-align: center !important;
+}
+
+.text-right {
+  text-align: right !important;
+}
+
+.text-small {
+  font-size: 11px !important;
+}
+
+.text-medium {
+  font-size: 14px !important;
+}
+
+.text-large {
+  font-size: 18px !important;
+}
+
+/* フォーマットパレット */
+.format-palette {
+  position: absolute;
+  background-color: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  padding: 8px;
+  z-index: 1000;
+}
+
+.format-palette-header {
+  font-weight: bold;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #eee;
+}
+
+.format-palette-section {
+  margin-bottom: 12px;
+}
+
+.format-color-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+}
+
+.format-color-cell {
+  width: 20px;
+  height: 20px;
+  border: 1px solid #ccc;
+  cursor: pointer;
+}
+
+.format-color-cell:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 3px rgba(0,0,0,0.3);
+}

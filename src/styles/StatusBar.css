@@ -15,10 +15,33 @@
   padding: 2px 8px;
   background-color: #f0f0f0;
   border-radius: 3px;
-  max-width: 50%;
+  max-width: 30%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.status-file-info {
+  display: flex;
+  align-items: center;
+  margin: 0 15px;
+}
+
+.file-name {
+  font-weight: 600;
+  color: #1976d2;
+}
+
+.modified-indicator {
+  color: #f57c00;
+  margin-left: 3px;
+  font-weight: bold;
+}
+
+.last-saved {
+  margin-left: 10px;
+  color: #757575;
+  font-size: 11px;
 }
 
 .status-stats {
@@ -45,4 +68,59 @@
 .stats-separator {
   margin: 0 8px;
   color: #ccc;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 768px) {
+  .status-bar {
+    flex-wrap: wrap;
+    height: auto;
+  }
+  
+  .status-message {
+    max-width: 100%;
+    margin-bottom: 4px;
+  }
+  
+  .status-file-info {
+    margin: 4px 0;
+  }
+  
+  .status-stats {
+    flex-wrap: wrap;
+    margin-top: 4px;
+  }
+}
+
+/* ダークモード対応 (オプション) */
+@media (prefers-color-scheme: dark) {
+  .status-bar {
+    background-color: #333;
+    border-top-color: #444;
+    color: #ddd;
+  }
+  
+  .status-message {
+    background-color: #444;
+  }
+  
+  .file-name {
+    color: #64b5f6;
+  }
+  
+  .modified-indicator {
+    color: #ffb74d;
+  }
+  
+  .last-saved {
+    color: #aaa;
+  }
+  
+  .stats-label {
+    color: #bbb;
+  }
+  
+  .stats-separator {
+    color: #555;
+  }
 }
