@@ -1,0 +1,132 @@
+.cell-comment {
+  position: absolute;
+  width: 250px;
+  background-color: #fff;
+  border: 1px solid #ddd;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  z-index: 1000;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.comment-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background-color: #f5f5f5;
+  border-bottom: 1px solid #ddd;
+}
+
+.comment-title {
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.comment-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.comment-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px;
+  border-radius: 3px;
+}
+
+.comment-button:hover {
+  background-color: #e5e5e5;
+}
+
+.edit-button:hover {
+  color: #1976d2;
+}
+
+.delete-button:hover {
+  color: #f44336;
+}
+
+.comment-body {
+  padding: 12px;
+  min-height: 60px;
+  max-height: 200px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.comment-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.comment-textarea {
+  width: 100%;
+  min-height: 60px;
+  padding: 4px;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  font-size: 14px;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.comment-footer {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: #777;
+  border-top: 1px solid #eee;
+  text-align: right;
+}
+
+.comment-date {
+  font-style: italic;
+}
+
+/* コメントを持つセルのスタイル */
+.cell-has-comment {
+  position: relative;
+}
+
+.cell-has-comment::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 8px 8px 0;
+  border-color: transparent #ff9800 transparent transparent;
+}
+
+/* コメントの吹き出し風デザイン（オプション） */
+.cell-comment::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 10px;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 8px 8px 8px;
+  border-color: transparent transparent #ddd transparent;
+}
+
+.cell-comment::after {
+  content: '';
+  position: absolute;
+  top: -7px;
+  left: 10px;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 8px 8px 8px;
+  border-color: transparent transparent #f5f5f5 transparent;
+}
