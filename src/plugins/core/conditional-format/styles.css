@@ -1,11 +1,5 @@
+/* src/plugins/core/conditional-format/styles.css */
 /* 条件付き書式プラグイン用のスタイル */
-.format-rule {
-  margin-bottom: 10px;
-  padding: 8px;
-  border: 1px solid #eee;
-  border-radius: 4px;
-}
-
 .cf-dialog-overlay {
   position: fixed;
   top: 0;
@@ -20,13 +14,18 @@
 }
 
 .cf-dialog {
-  width: 500px;
+  width: 600px;
   max-width: 90vw;
   background-color: white;
   border-radius: 6px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
   display: flex;
   flex-direction: column;
+  max-height: 80vh;
+}
+
+.cf-rules-manager {
+  width: 800px;
 }
 
 .cf-dialog-header {
@@ -51,37 +50,49 @@
   color: #666;
 }
 
+.cf-dialog-close:hover {
+  color: #000;
+}
+
 .cf-dialog-body {
   padding: 16px;
-  max-height: 70vh;
   overflow-y: auto;
+  flex: 1;
 }
 
 .cf-section-title {
-  margin-top: 16px;
-  margin-bottom: 8px;
+  margin-top: 20px;
+  margin-bottom: 12px;
   font-size: 16px;
   font-weight: 600;
   border-bottom: 1px solid #eee;
-  padding-bottom: 4px;
+  padding-bottom: 8px;
 }
 
 .cf-form-group {
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .cf-form-row {
   display: flex;
-  gap: 12px;
+  gap: 16px;
+  margin-bottom: 16px;
 }
 
 .cf-form-group label {
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   font-weight: 500;
 }
 
-.cf-form-group .cf-range-display {
+.cf-checkbox-group label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.cf-range-display {
   display: inline-block;
   background-color: #f1f1f1;
   padding: 4px 8px;
@@ -98,12 +109,59 @@
   font-size: 14px;
 }
 
+.cf-select optgroup {
+  font-weight: bold;
+}
+
+.cf-help-text {
+  margin-top: 4px;
+  color: #666;
+  font-size: 12px;
+}
+
 .cf-color-picker {
   width: 40px;
   height: 40px;
   border: none;
   padding: 0;
   background: none;
+  vertical-align: middle;
+}
+
+.cf-color-reset {
+  margin-left: 8px;
+  padding: 4px 8px;
+  background-color: #f1f1f1;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cf-color-reset:hover {
+  background-color: #e0e0e0;
+}
+
+.cf-preview-section {
+  margin-top: 20px;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  padding: 10px;
+  background-color: #f9f9f9;
+}
+
+.cf-preview-section h4 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+
+.cf-preview-container {
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed #ccc;
 }
 
 .cf-dialog-footer {
@@ -120,6 +178,7 @@
   border-radius: 4px;
   font-size: 14px;
   cursor: pointer;
+  transition: background-color 0.2s;
 }
 
 .cf-button-primary {
@@ -138,4 +197,81 @@
 
 .cf-button-secondary:hover {
   background-color: #e5e5e5;
+}
+
+.cf-button-danger {
+  background-color: #f44336;
+  color: white;
+}
+
+.cf-button-danger:hover {
+  background-color: #d32f2f;
+}
+
+.cf-error-message {
+  background-color: #fde8e8;
+  color: #e53e3e;
+  padding: 8px 12px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  border-left: 4px solid #e53e3e;
+}
+
+.cf-spacer {
+  flex: 1;
+}
+
+/* ルール管理テーブル */
+.cf-rules-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.cf-rules-table th,
+.cf-rules-table td {
+  padding: 8px 12px;
+  border: 1px solid #eee;
+  text-align: left;
+}
+
+.cf-rules-table th {
+  background-color: #f5f5f5;
+  font-weight: 600;
+}
+
+.cf-rules-table tr:hover {
+  background-color: #f5f9ff;
+}
+
+.cf-rules-table tr.cf-selected-rule {
+  background-color: #e3f2fd;
+}
+
+.cf-style-preview {
+  width: 100%;
+  text-align: center;
+  border-radius: 3px;
+  min-width: 80px;
+}
+
+.cf-rule-edit-btn,
+.cf-rule-delete-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  margin: 0 2px;
+  font-size: 16px;
+}
+
+.cf-rule-edit-btn:hover,
+.cf-rule-delete-btn:hover {
+  transform: scale(1.1);
+}
+
+.cf-empty-state {
+  text-align: center;
+  padding: 30px;
+  color: #666;
+  font-style: italic;
 }
