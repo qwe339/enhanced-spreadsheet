@@ -12,14 +12,13 @@ export function createHyperFormula(data, options = {}) {
     // HyperFormulaのオプション
     const defaultOptions = {
       licenseKey: 'gpl-v3',
-      // 日本語の式関数名をサポート
-      language: 'ja-JP',
-      precisionRounding: 10, // 計算の精度
-      smartRounding: true, // スマートな丸め処理
-      nullDate: { year: 1899, month: 12, day: 30 }, // Excelと互換性のある日付の開始点
-      maxRows: 500, // 最大行数
-      maxColumns: 100, // 最大列数
-      useColumnIndex: true // 列インデックスを使用（A, B, C, ...）
+      // language: 'ja-JP', // 言語設定を削除することでデフォルトの'en'を使用
+      precisionRounding: 10,
+      smartRounding: true,
+      nullDate: { year: 1899, month: 12, day: 30 },
+      maxRows: 500,
+      maxColumns: 100,
+      useColumnIndex: true
     };
     
     const hyperformulaOptions = {
@@ -27,7 +26,7 @@ export function createHyperFormula(data, options = {}) {
       ...options
     };
     
-    // データをHyperFormula形式に変換（nullやundefinedを''に変換）
+    // データをHyperFormula形式に変換
     const sheetData = data ? data.map(row => 
       row.map(cell => cell === null || cell === undefined ? '' : cell)
     ) : [[]];

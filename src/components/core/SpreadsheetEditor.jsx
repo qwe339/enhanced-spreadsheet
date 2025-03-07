@@ -168,6 +168,12 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
     
     window.addEventListener('resize', handleResize);
     
+    // デバッグ用：グローバルにインスタンスを保存
+    if (hotRef.current && hotRef.current.hotInstance) {
+      window.__hotInstance = hotRef.current.hotInstance;
+      console.log('Hot instance saved to global for debugging');
+    }
+    
     // 各シート用にHyperFormulaを初期化
     initializeHyperFormula();
     
@@ -471,7 +477,7 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
   };
   
   // 新規ファイル作成
-  const createNewFile = () => {
+  function createNewFile() {
     if (isModified) {
       const confirmed = window.confirm('保存されていない変更があります。新しいファイルを作成しますか？');
       if (!confirmed) return;
@@ -503,10 +509,10 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
     }
     const newHfInstance = createHyperFormula(emptyData);
     setHyperformulaInstance(newHfInstance);
-  };
+  }
   
   // ファイル保存
-  const saveFile = () => {
+  function saveFile() {
     setIsModified(false);
     setStatusMessage('ファイルを保存しました');
     return {
@@ -517,10 +523,10 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
       cellStyles,
       cellFormulas
     };
-  };
+  }
   
   // シート切り替え
-  const handleSheetChange = (sheetName) => {
+  function handleSheetChange(sheetName) {
     if (!sheets.includes(sheetName) || sheetName === currentSheetName) return;
     
     // 現在のシートデータを保存
@@ -538,10 +544,10 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
     }
     
     setStatusMessage(`シート "${sheetName}" に切り替えました`);
-  };
+  }
   
   // シート追加
-  const handleAddSheet = () => {
+  function handleAddSheet() {
     const newSheetName = `Sheet${sheets.length + 1}`;
     const newSheets = [...sheets, newSheetName];
     setSheets(newSheets);
@@ -568,10 +574,10 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
     
     setIsModified(true);
     setStatusMessage(`シート "${newSheetName}" を追加しました`);
-  };
+  }
   
   // シート名変更
-  const handleRenameSheet = (oldName, newName) => {
+  function handleRenameSheet(oldName, newName) {
     if (!sheets.includes(oldName) || sheets.includes(newName)) return;
     
     const sheetIndex = sheets.indexOf(oldName);
@@ -624,10 +630,10 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
     
     setIsModified(true);
     setStatusMessage(`シート名を "${oldName}" から "${newName}" に変更しました`);
-  };
+  }
   
   // シート削除
-  const handleDeleteSheet = (sheetName) => {
+  function handleDeleteSheet(sheetName) {
     if (!sheets.includes(sheetName) || sheets.length <= 1) return;
     
     // 削除するシートが現在のシートかチェック
@@ -676,7 +682,7 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
     
     setIsModified(true);
     setStatusMessage(`シート "${sheetName}" を削除しました`);
-  };
+  }
   
   // コピー機能
   async function handleCopy() {

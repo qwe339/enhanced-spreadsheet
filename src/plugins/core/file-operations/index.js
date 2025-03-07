@@ -1,9 +1,7 @@
-// src/plugins/core/file-operations/index.js
-import FileOperationsDialog from './FileOperationsDialog';
-import './styles.css';
-import Papa from 'papaparse';
+import React, { Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
-import React from 'react';
+import Papa from 'papaparse';
+import './styles.css';
 
 const fileOperationsPlugin = {
   name: 'ファイル操作',
@@ -13,9 +11,6 @@ const fileOperationsPlugin = {
   initialize(registry) {
     console.log('File operations plugin initialized');
     this.registry = registry;
-    
-    // ダイアログを初期化
-    this.dialog = new FileOperationsDialog(this);
     
     // CSVインポートモーダルのルート要素
     this.csvImportModalRoot = null;
@@ -36,13 +31,13 @@ const fileOperationsPlugin = {
     // ファイル開くイベント
     this.handleOpenFile = () => {
       console.log('Open file dialog requested');
-      this.dialog.showOpenDialog();
+      this.showFileOpenDialog();
     };
     
     // 名前を付けて保存イベント
     this.handleSaveAsFile = () => {
       console.log('Save as dialog requested');
-      this.dialog.showSaveAsDialog();
+      this.showSaveAsDialog();
     };
     
     // CSVインポートイベント
@@ -50,13 +45,19 @@ const fileOperationsPlugin = {
       console.log('CSV import dialog requested');
       this.showCSVImportModal();
     };
-
+    
+    // CSVエクスポートイベント
+    this.handleExportCSV = () => {
+      console.log('CSV export requested');
+      this.exportToCSV();
+    };
+    
     // 保存イベント
     this.handleSaveFile = (e) => {
       const { filename } = e.detail || {};
       this.saveCurrentSpreadsheet(filename);
     };
-
+    
     // 読み込みイベント
     this.handleLoadFile = (e) => {
       const { filename, data } = e.detail || {};
@@ -67,6 +68,7 @@ const fileOperationsPlugin = {
     document.addEventListener('file-open', this.handleOpenFile);
     document.addEventListener('file-save-as', this.handleSaveAsFile);
     document.addEventListener('file-import-csv', this.handleImportCSV);
+    document.addEventListener('file-export-csv', this.handleExportCSV);
     document.addEventListener('spreadsheet-save-data', this.handleSaveFile);
     document.addEventListener('spreadsheet-load-data', this.handleLoadFile);
   },
@@ -76,69 +78,9 @@ const fileOperationsPlugin = {
     document.removeEventListener('file-open', this.handleOpenFile);
     document.removeEventListener('file-save-as', this.handleSaveAsFile);
     document.removeEventListener('file-import-csv', this.handleImportCSV);
+    document.removeEventListener('file-export-csv', this.handleExportCSV);
     document.removeEventListener('spreadsheet-save-data', this.handleSaveFile);
     document.removeEventListener('spreadsheet-load-data', this.handleLoadFile);
-  },
-  
-  // CSVインポートモーダルを表示
-  showCSVImportModal() {
-    // 既存のモーダルを削除
-    this.removeCSVImportModal();
-    
-    // モーダル用のコンテナを作成
-    const modalContainer = document.createElement('div');
-    modalContainer.id = 'csv-import-modal-container';
-    document.body.appendChild(modalContainer);
-    
-    // React要素をレンダリング
-    const CSVImportModal = React.lazy(() => import('../../../components/modals/CSVImportModal'));
-    
-    this.csvImportModalRoot = createRoot(modalContainer);
-    this.csvImportModalRoot.render(
-      <React.Suspense fallback={<div>Loading...</div>}>
-        <CSVImportModal
-          onClose={() => this.removeCSVImportModal()}
-          onImport={(data) => this.importCSVData(data)}
-        />
-      </React.Suspense>
-    );
-  },
-  
-  // CSVインポートモーダルを削除
-  removeCSVImportModal() {
-    if (this.csvImportModalRoot) {
-      this.csvImportModalRoot.unmount();
-      this.csvImportModalRoot = null;
-      
-      const container = document.getElementById('csv-import-modal-container');
-      if (container && container.parentNode) {
-        container.parentNode.removeChild(container);
-      }
-    }
-  },
-  
-  // CSVデータをインポート
-  importCSVData(data) {
-    if (!data || !Array.isArray(data) || data.length === 0) {
-      console.error('インポートするデータがありません');
-      return;
-    }
-    
-    console.log('CSVデータをインポート:', data);
-    
-    // Handsontableインスタンスを取得
-    const hot = this.registry.hotInstance;
-    if (!hot) {
-      console.error('Handsontableインスタンスが見つかりません');
-      return;
-    }
-    
-    // カスタムイベントを発行してエディタにデータを渡す
-    document.dispatchEvent(new CustomEvent('spreadsheet-import-csv', { 
-      detail: { data } 
-    }));
-    
-    this.showStatusMessage('CSVデータをインポートしました');
   },
   
   hooks: {
@@ -159,7 +101,7 @@ const fileOperationsPlugin = {
           document.dispatchEvent(new CustomEvent('file-import-csv'));
           return true;
         case 'exportCSV':
-          this.exportToCSV();
+          document.dispatchEvent(new CustomEvent('file-export-csv'));
           return true;
         default:
           return false;
@@ -182,28 +124,363 @@ const fileOperationsPlugin = {
     }
   },
   
-  // 現在のスプレッドシートを保存
-  saveCurrentSpreadsheet(customFilename) {
-    if (!this.registry || !this.registry.hotInstance) {
-      console.error('スプレッドシートエディタが見つかりません');
-      return false;
+  // ファイルを開くダイアログを表示
+  showFileOpenDialog() {
+    // 保存されたファイルのリストを取得
+    const savedFiles = this.getSavedFilesList();
+    
+    // ダイアログのルート要素を作成
+    const dialogRoot = document.createElement('div');
+    dialogRoot.className = 'file-dialog-overlay';
+    
+    dialogRoot.innerHTML = `
+      <div class="file-dialog">
+        <div class="file-dialog-header">
+          <h2>ファイルを開く</h2>
+          <button class="file-dialog-close">×</button>
+        </div>
+        <div class="file-dialog-content">
+          ${savedFiles.length === 0 
+            ? '<p>保存されたファイルがありません</p>' 
+            : `
+              <div class="file-list">
+                ${savedFiles.map(file => `
+                  <div class="file-item" data-filename="${file}">${file}</div>
+                `).join('')}
+              </div>
+            `
+          }
+        </div>
+        <div class="file-dialog-footer">
+          <button class="file-dialog-cancel">キャンセル</button>
+          <button class="file-dialog-open" ${savedFiles.length === 0 ? 'disabled' : ''}>開く</button>
+        </div>
+      </div>
+    `;
+    
+    // クローズボタンのクリックイベント
+    const closeBtn = dialogRoot.querySelector('.file-dialog-close');
+    closeBtn.addEventListener('click', () => this.removeDialog(dialogRoot));
+    
+    // キャンセルボタンのクリックイベント
+    const cancelBtn = dialogRoot.querySelector('.file-dialog-cancel');
+    cancelBtn.addEventListener('click', () => this.removeDialog(dialogRoot));
+    
+    // 背景クリックでダイアログを閉じる
+    dialogRoot.addEventListener('click', (e) => {
+      if (e.target === dialogRoot) this.removeDialog(dialogRoot);
+    });
+    
+    // ファイルリストアイテムのクリックイベント
+    let selectedFile = null;
+    const fileItems = dialogRoot.querySelectorAll('.file-item');
+    fileItems.forEach(item => {
+      item.addEventListener('click', () => {
+        fileItems.forEach(i => i.classList.remove('selected'));
+        item.classList.add('selected');
+        selectedFile = item.getAttribute('data-filename');
+      });
+      
+      // ダブルクリックで開く
+      item.addEventListener('dblclick', () => {
+        const filename = item.getAttribute('data-filename');
+        this.loadSpreadsheetData(filename);
+        this.removeDialog(dialogRoot);
+      });
+    });
+    
+    // 開くボタンのクリックイベント
+    const openBtn = dialogRoot.querySelector('.file-dialog-open');
+    openBtn.addEventListener('click', () => {
+      if (selectedFile) {
+        this.loadSpreadsheetData(selectedFile);
+        this.removeDialog(dialogRoot);
+      } else {
+        alert('ファイルを選択してください');
+      }
+    });
+    
+    // DOMに追加
+    document.body.appendChild(dialogRoot);
+  },
+  
+  // 名前を付けて保存ダイアログを表示
+  showSaveAsDialog() {
+    // ダイアログのルート要素を作成
+    const dialogRoot = document.createElement('div');
+    dialogRoot.className = 'file-dialog-overlay';
+    
+    dialogRoot.innerHTML = `
+      <div class="file-dialog">
+        <div class="file-dialog-header">
+          <h2>名前を付けて保存</h2>
+          <button class="file-dialog-close">×</button>
+        </div>
+        <div class="file-dialog-content">
+          <div class="file-form-group">
+            <label for="filename">ファイル名:</label>
+            <input type="text" id="filename" class="file-input" placeholder="ファイル名を入力">
+          </div>
+        </div>
+        <div class="file-dialog-footer">
+          <button class="file-dialog-cancel">キャンセル</button>
+          <button class="file-dialog-save">保存</button>
+        </div>
+      </div>
+    `;
+    
+    // クローズボタンのクリックイベント
+    const closeBtn = dialogRoot.querySelector('.file-dialog-close');
+    closeBtn.addEventListener('click', () => this.removeDialog(dialogRoot));
+    
+    // キャンセルボタンのクリックイベント
+    const cancelBtn = dialogRoot.querySelector('.file-dialog-cancel');
+    cancelBtn.addEventListener('click', () => this.removeDialog(dialogRoot));
+    
+    // 背景クリックでダイアログを閉じる
+    dialogRoot.addEventListener('click', (e) => {
+      if (e.target === dialogRoot) this.removeDialog(dialogRoot);
+    });
+    
+    // 保存ボタンのクリックイベント
+    const saveBtn = dialogRoot.querySelector('.file-dialog-save');
+    const filenameInput = dialogRoot.querySelector('#filename');
+    
+    saveBtn.addEventListener('click', () => {
+      const filename = filenameInput.value.trim();
+      if (!filename) {
+        alert('ファイル名を入力してください');
+        return;
+      }
+      
+      this.saveCurrentSpreadsheet(filename);
+      this.removeDialog(dialogRoot);
+    });
+    
+    // Enterキーで保存
+    filenameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const filename = filenameInput.value.trim();
+        if (filename) {
+          this.saveCurrentSpreadsheet(filename);
+          this.removeDialog(dialogRoot);
+        }
+      }
+    });
+    
+    // DOMに追加
+    document.body.appendChild(dialogRoot);
+    
+    // 入力欄にフォーカス
+    setTimeout(() => filenameInput.focus(), 100);
+  },
+  
+  // CSVインポートモーダルを表示
+  showCSVImportModal() {
+    // 既存のモーダルを削除
+    this.removeCSVImportModal();
+    
+    // モーダル用のコンテナを作成
+    const modalContainer = document.createElement('div');
+    modalContainer.id = 'csv-import-modal-container';
+    document.body.appendChild(modalContainer);
+    
+    // React要素をレンダリング
+    import('../../../components/modals/CSVImportModal')
+      .then(({ default: CSVImportModal }) => {
+        this.csvImportModalRoot = createRoot(modalContainer);
+        this.csvImportModalRoot.render(
+          <Suspense fallback={<div>Loading...</div>}>
+            <CSVImportModal
+              onClose={() => this.removeCSVImportModal()}
+              onImport={(data) => this.importCSVData(data)}
+            />
+          </Suspense>
+        );
+      })
+      .catch(error => {
+        console.error('CSV Import Modal loading error:', error);
+        this.showStatusMessage('CSVインポートモーダルの読み込みに失敗しました', true);
+        this.removeCSVImportModal();
+      });
+  },
+  
+  // CSVインポートモーダルを削除
+  removeCSVImportModal() {
+    if (this.csvImportModalRoot) {
+      this.csvImportModalRoot.unmount();
+      this.csvImportModalRoot = null;
+      
+      const container = document.getElementById('csv-import-modal-container');
+      if (container && container.parentNode) {
+        container.parentNode.removeChild(container);
+      }
+    }
+  },
+  
+  // ダイアログを削除
+  removeDialog(dialogRoot) {
+    if (dialogRoot && dialogRoot.parentNode) {
+      dialogRoot.parentNode.removeChild(dialogRoot);
+    }
+  },
+  
+  // CSVデータをインポート
+  importCSVData(data) {
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      this.showStatusMessage('インポートするデータがありません', true);
+      return;
+    }
+    
+    console.log('CSVデータをインポート:', data);
+    
+    // Handsontableインスタンスを取得する複数の方法を試す
+    let hotInstance = null;
+    
+    // 1. registryから直接取得
+    if (this.registry && this.registry.hotInstance) {
+      hotInstance = this.registry.hotInstance;
+    } 
+    // 2. グローバル変数から取得（デバッグ用）
+    else if (window.__hotInstance) {
+      hotInstance = window.__hotInstance;
+    }
+    // 3. DOMから探索
+    else {
+      const handsontableEl = document.querySelector('.handsontable');
+      if (handsontableEl && handsontableEl.hotInstance) {
+        hotInstance = handsontableEl.hotInstance;
+      }
+    }
+    
+    if (hotInstance) {
+      try {
+        // データをロード
+        hotInstance.loadData(data);
+        
+        // カスタムイベントを発行
+        document.dispatchEvent(new CustomEvent('spreadsheet-import-csv', { 
+          detail: { data } 
+        }));
+        
+        this.showStatusMessage('CSVデータをインポートしました');
+      } catch (error) {
+        console.error('CSVデータ適用エラー:', error);
+        this.showStatusMessage('CSVデータの適用に失敗しました', true);
+      }
+    } else {
+      console.error('Handsontableインスタンスが見つかりません');
+      
+      // フォールバック：カスタムイベントだけ発行
+      document.dispatchEvent(new CustomEvent('spreadsheet-import-csv', { 
+        detail: { data } 
+      }));
+      
+      this.showStatusMessage('エディタの初期化が完了していません。イベントのみ発行しました', true);
+    }
+  },
+  
+  // CSVをエクスポート
+  exportToCSV(hotInstance) {
+    // hotInstanceが渡されていない場合は取得を試みる
+    if (!hotInstance) {
+      // 1. registryから直接取得
+      if (this.registry && this.registry.hotInstance) {
+        hotInstance = this.registry.hotInstance;
+      } 
+      // 2. グローバル変数から取得（デバッグ用）
+      else if (window.__hotInstance) {
+        hotInstance = window.__hotInstance;
+      }
+      // 3. DOMから探索
+      else {
+        const handsontableEl = document.querySelector('.handsontable');
+        if (handsontableEl && handsontableEl.hotInstance) {
+          hotInstance = handsontableEl.hotInstance;
+        }
+      }
+    }
+    
+    if (!hotInstance) {
+      this.showStatusMessage('エクスポートするデータがありません', true);
+      return;
     }
     
     try {
-      // スプレッドシートエディタからデータを取得
-      const editor = this.registry.hotInstance;
-      const data = editor.getData();
+      // データを取得
+      const data = hotInstance.getData();
+      
+      // CSVに変換
+      const csvContent = Papa.unparse(data, {
+        delimiter: ",",
+        header: false
+      });
       
       // ファイル名を決定
-      let filename = customFilename;
+      const filename = this.getCurrentFilename() || 'spreadsheet';
+      const csvFilename = `${filename}.csv`;
       
+      // ダウンロード
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      
+      link.setAttribute('href', url);
+      link.setAttribute('download', csvFilename);
+      link.style.visibility = 'hidden';
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // URLオブジェクトを解放
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 100);
+      
+      this.showStatusMessage(`CSVファイル "${csvFilename}" をエクスポートしました`);
+    } catch (error) {
+      console.error('CSVエクスポートエラー:', error);
+      this.showStatusMessage('CSVのエクスポート中にエラーが発生しました', true);
+    }
+  },
+  
+  // 現在のスプレッドシートを保存
+  saveCurrentSpreadsheet(filename) {
+    // Handsontableインスタンスを取得
+    let hotInstance = null;
+    
+    // 1. registryから直接取得
+    if (this.registry && this.registry.hotInstance) {
+      hotInstance = this.registry.hotInstance;
+    } 
+    // 2. グローバル変数から取得（デバッグ用）
+    else if (window.__hotInstance) {
+      hotInstance = window.__hotInstance;
+    }
+    
+    if (!hotInstance) {
+      this.showStatusMessage('保存するデータがありません', true);
+      return;
+    }
+    
+    try {
+      // 現在のデータを取得
+      const data = hotInstance.getData();
+      
+      // 現在のファイル名を取得（指定がない場合）
       if (!filename) {
-        // コンテキストからファイル名を取得
-        const fileInfo = this.getFileInfo();
-        filename = fileInfo.fileName || '新しいスプレッドシート';
+        const currentFilename = this.getCurrentFilename();
+        if (currentFilename && currentFilename !== '新しいスプレッドシート') {
+          filename = currentFilename;
+        } else {
+          // 名前がない場合は名前を付けて保存ダイアログを表示
+          document.dispatchEvent(new CustomEvent('file-save-as'));
+          return;
+        }
       }
       
-      // 保存するデータを準備
+      // 保存データを準備
       const saveData = {
         version: '1.0.0',
         timestamp: new Date().toISOString(),
@@ -226,32 +503,43 @@ const fileOperationsPlugin = {
       // ファイルリストを更新
       this.updateFileList(filename);
       
-      // 保存成功メッセージ
-      this.showStatusMessage(`ファイル "${filename}" を保存しました`);
+      // カスタムイベントを発行
+      document.dispatchEvent(new CustomEvent('spreadsheet-save-complete', {
+        detail: { filename, success: true }
+      }));
       
-      return true;
+      this.showStatusMessage(`ファイル "${filename}" を保存しました`);
     } catch (error) {
       console.error('スプレッドシート保存エラー:', error);
       this.showStatusMessage('保存中にエラーが発生しました', true);
-      return false;
+      
+      // 失敗イベントを発行
+      document.dispatchEvent(new CustomEvent('spreadsheet-save-complete', {
+        detail: { filename, success: false, error: error.message }
+      }));
     }
   },
   
-  // ファイルを読み込む
+  // 保存されたファイルを読み込む
   loadSpreadsheetData(filename, data) {
-    if (!filename) return;
+    if (!filename && !data) {
+      this.showStatusMessage('読み込むファイルが指定されていません', true);
+      return;
+    }
     
     try {
-      // ファイル名指定があればLocalStorageから読み込み
       let loadData;
       
-      if (typeof data === 'object') {
+      // データが直接渡された場合はそれを使用
+      if (data) {
         loadData = data;
-      } else {
+      } 
+      // ファイル名が指定された場合はローカルストレージから読み込み
+      else {
         const savedData = localStorage.getItem(`spreadsheet_${filename}`);
         if (!savedData) {
           this.showStatusMessage(`ファイル "${filename}" が見つかりません`, true);
-          return false;
+          return;
         }
         
         loadData = JSON.parse(savedData);
@@ -262,104 +550,87 @@ const fileOperationsPlugin = {
         console.warn('古いバージョンのファイル形式です');
       }
       
-      // エディタのインスタンスを取得
-      const hotInstance = this.registry.hotInstance;
-      if (!hotInstance) {
-        this.showStatusMessage('エディタが見つかりません', true);
-        return false;
+      // Handsontableインスタンスを取得
+      let hotInstance = null;
+      
+      // 1. registryから直接取得
+      if (this.registry && this.registry.hotInstance) {
+        hotInstance = this.registry.hotInstance;
+      } 
+      // 2. グローバル変数から取得（デバッグ用）
+      else if (window.__hotInstance) {
+        hotInstance = window.__hotInstance;
       }
       
-      // シート情報を設定
-      const currentSheet = loadData.currentSheet || 'Sheet1';
-      const sheetData = loadData.data[currentSheet] || [];
-      
-      // データの読み込み
-      hotInstance.loadData(sheetData);
-      
-      // シート情報を更新
-      this.updateSheetInfo({
-        currentSheet,
-        sheets: loadData.sheets || ['Sheet1']
-      });
-      
-      // フォーマット情報があれば適用
-      if (loadData.formatData) {
-        this.applyFormatData(loadData.formatData);
+      if (hotInstance) {
+        // 現在のシートデータを読み込み
+        const currentSheet = loadData.currentSheet || 'Sheet1';
+        const sheetData = loadData.data[currentSheet] || [];
+        
+        // データをロード
+        hotInstance.loadData(sheetData);
       }
       
-      // チャートデータがあれば適用
-      if (loadData.charts && Array.isArray(loadData.charts)) {
-        this.applyChartData(loadData.charts);
-      }
+      // カスタムイベントを発行して他のコンポーネントにも通知
+      document.dispatchEvent(new CustomEvent('spreadsheet-load-complete', {
+        detail: { 
+          filename, 
+          data: loadData,
+          success: true 
+        }
+      }));
       
-      // コメントデータがあれば適用
-      if (loadData.comments) {
-        this.applyCommentData(loadData.comments);
-      }
-      
-      // バリデーションデータがあれば適用
-      if (loadData.validations) {
-        this.applyValidationData(loadData.validations);
-      }
-      
-      // ファイル名の更新
-      this.updateFilename(filename);
-      
-      // 成功メッセージ
-      this.showStatusMessage(`ファイル "${filename}" を読み込みました`);
-      
-      return true;
+      this.showStatusMessage(`ファイル "${filename || '外部データ'}" を読み込みました`);
     } catch (error) {
       console.error('ファイル読み込みエラー:', error);
       this.showStatusMessage('ファイルの読み込み中にエラーが発生しました', true);
-      return false;
+      
+      // 失敗イベントを発行
+      document.dispatchEvent(new CustomEvent('spreadsheet-load-complete', {
+        detail: { filename, success: false, error: error.message }
+      }));
     }
   },
   
-  // CSVをエクスポート
-  exportToCSV(hotInstance) {
-    if (!hotInstance) {
-      hotInstance = this.registry.hotInstance;
+  // ステータスメッセージを表示
+  showStatusMessage(message, isError = false) {
+    if (isError) {
+      console.error(message);
+      alert(message);
+      return;
     }
     
-    if (!hotInstance) {
-      this.showStatusMessage('エディタが見つかりません', true);
-      return false;
+    console.log(message);
+    
+    // スプレッドシートエディタがあれば、そのステータスバーを更新
+    const editor = document.querySelector('.spreadsheet-editor');
+    if (editor) {
+      const statusBar = editor.querySelector('.status-message');
+      if (statusBar) {
+        const originalText = statusBar.textContent;
+        statusBar.textContent = message;
+        
+        // 3秒後に元のメッセージに戻す
+        setTimeout(() => {
+          statusBar.textContent = originalText;
+        }, 3000);
+      }
     }
     
+    // カスタムイベントを発行
+    document.dispatchEvent(new CustomEvent('spreadsheet-status-update', {
+      detail: { message, isError }
+    }));
+  },
+  
+  // 保存されたファイルのリストを取得
+  getSavedFilesList() {
     try {
-      // データを取得
-      const data = hotInstance.getData();
-      
-      // PapaParseでCSVに変換
-      const csvContent = Papa.unparse(data, {
-        delimiter: ",",
-        header: false
-      });
-      
-      // ファイル名を決定
-      const filename = this.getFileInfo().fileName || 'spreadsheet';
-      const csvFilename = `${filename}.csv`;
-      
-      // ダウンロード
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      
-      link.setAttribute('href', url);
-      link.setAttribute('download', csvFilename);
-      link.style.visibility = 'hidden';
-      
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      this.showStatusMessage(`CSVファイル "${csvFilename}" をエクスポートしました`);
-      return true;
+      const savedFiles = localStorage.getItem('spreadsheet_files');
+      return savedFiles ? JSON.parse(savedFiles) : [];
     } catch (error) {
-      console.error('CSVエクスポートエラー:', error);
-      this.showStatusMessage('CSVエクスポート中にエラーが発生しました', true);
-      return false;
+      console.error('ファイルリスト取得エラー:', error);
+      return [];
     }
   },
   
@@ -368,7 +639,7 @@ const fileOperationsPlugin = {
     if (!filename) return;
     
     try {
-      let files = this.getSavedFileList();
+      let files = this.getSavedFilesList();
       
       // ファイル名が存在しない場合のみ追加
       if (!files.includes(filename)) {
@@ -377,17 +648,6 @@ const fileOperationsPlugin = {
       }
     } catch (error) {
       console.error('ファイルリスト更新エラー:', error);
-    }
-  },
-  
-  // 保存されたファイルのリストを取得
-  getSavedFileList() {
-    try {
-      const savedFiles = localStorage.getItem('spreadsheet_files');
-      return savedFiles ? JSON.parse(savedFiles) : [];
-    } catch (error) {
-      console.error('ファイルリスト取得エラー:', error);
-      return [];
     }
   },
   
@@ -400,7 +660,7 @@ const fileOperationsPlugin = {
       localStorage.removeItem(`spreadsheet_${filename}`);
       
       // ファイルリストを更新
-      let files = this.getSavedFileList();
+      let files = this.getSavedFilesList();
       files = files.filter(file => file !== filename);
       localStorage.setItem('spreadsheet_files', JSON.stringify(files));
       
@@ -413,193 +673,65 @@ const fileOperationsPlugin = {
     }
   },
   
-  // ステータスメッセージを表示
-  showStatusMessage(message, isError = false) {
-    if (isError) {
-      console.error(message);
-      alert(message);
-    } else {
-      console.log(message);
-      
-      // スプレッドシートエディタのステータス更新関数を呼び出す
-      const spreadsheetEditor = document.querySelector('.spreadsheet-editor');
-      if (spreadsheetEditor && spreadsheetEditor.__reactFiber$) {
-        // Reactコンポーネントのインスタンスからメソッドを呼び出す
-        const editorInstance = this.registry.hotInstance;
-        if (editorInstance && editorInstance.updateStatusMessage) {
-          editorInstance.updateStatusMessage(message);
-        }
-      }
-    }
+  // 現在のファイル名を取得
+  getCurrentFilename() {
+    // スプレッドシートエディタのヘッダーからファイル名を取得
+    const fileInfo = document.querySelector('.spreadsheet-editor .file-info');
+    return fileInfo ? fileInfo.textContent.replace(/\s*\*\s*$/, '').trim() : '新しいスプレッドシート';
   },
   
-  // 現在のファイル情報を取得
-  getFileInfo() {
-    const spreadsheetEditor = document.querySelector('.spreadsheet-editor');
-    if (!spreadsheetEditor) return { fileName: '新しいスプレッドシート' };
-    
-    // ファイル情報の要素を取得
-    const fileInfoElement = spreadsheetEditor.querySelector('.file-info');
-    if (!fileInfoElement) return { fileName: '新しいスプレッドシート' };
-    
-    // テキスト内容から「*」を除去してファイル名を取得
-    const fileName = fileInfoElement.textContent.replace(/\s*\*\s*$/, '').trim();
-    
-    return { fileName };
-  },
-  
-  // 現在のシート情報を取得
+  // 現在のシート名を取得
   getCurrentSheet() {
-    const sheetTabs = document.querySelector('.sheet-tabs');
-    if (!sheetTabs) return 'Sheet1';
-    
-    const activeTab = sheetTabs.querySelector('.sheet-tab.active');
-    if (!activeTab) return 'Sheet1';
-    
-    const tabText = activeTab.querySelector('.sheet-tab-text');
-    return tabText ? tabText.textContent : 'Sheet1';
+    // アクティブなシートタブからシート名を取得
+    const activeTab = document.querySelector('.sheet-tabs .sheet-tab.active .sheet-tab-text');
+    return activeTab ? activeTab.textContent : 'Sheet1';
   },
   
   // シートリストを取得
   getSheetList() {
-    const sheetTabs = document.querySelector('.sheet-tabs');
-    if (!sheetTabs) return ['Sheet1'];
-    
-    const tabs = Array.from(sheetTabs.querySelectorAll('.sheet-tab:not(.add-sheet)'));
-    return tabs.map(tab => {
-      const tabText = tab.querySelector('.sheet-tab-text');
-      return tabText ? tabText.textContent : '';
-    }).filter(Boolean);
-  },
-  
-  // ファイル名を更新
-  updateFilename(filename) {
-    if (!filename) return;
-    
-    // エディタのファイル名更新メソッドを呼び出す
-    const editorInstance = this.registry.hotInstance;
-    if (editorInstance && editorInstance.setFilename) {
-      editorInstance.setFilename(filename);
-    } else {
-      // DOM操作でファイル名を更新
-      const fileInfoElement = document.querySelector('.spreadsheet-editor .file-info');
-      if (fileInfoElement) {
-        fileInfoElement.textContent = filename;
-      }
-    }
-  },
-  
-  // シート情報を更新
-  updateSheetInfo(sheetInfo) {
-    if (!sheetInfo) return;
-    
-    // エディタのシート情報更新メソッドを呼び出す
-    const editorInstance = this.registry.hotInstance;
-    if (editorInstance) {
-      if (editorInstance.updateSheets) {
-        editorInstance.updateSheets(sheetInfo.sheets);
-      }
-      if (editorInstance.switchToSheet) {
-        editorInstance.switchToSheet(sheetInfo.currentSheet);
-      }
-    }
+    // シートタブからシート名のリストを取得
+    const sheetTabs = document.querySelectorAll('.sheet-tabs .sheet-tab:not(.add-sheet) .sheet-tab-text');
+    return Array.from(sheetTabs).map(tab => tab.textContent);
   },
   
   // フォーマットデータを取得
   getFormatData() {
-    // フォーマットプラグインからデータを取得
-    const formatPlugin = this.registry.plugins['formatting'];
-    if (formatPlugin && formatPlugin.getFormatData) {
-      return formatPlugin.getFormatData();
+    // 書式設定プラグインがあれば、そのデータを取得
+    if (this.registry && this.registry.plugins && this.registry.plugins['formatting']) {
+      const formatPlugin = this.registry.plugins['formatting'];
+      return formatPlugin.cellStyles || {};
     }
-    
-    return null;
-  },
-  
-  // フォーマットデータを適用
-  applyFormatData(formatData) {
-    if (!formatData) return;
-    
-    // フォーマットプラグインを使用してデータを適用
-    const formatPlugin = this.registry.plugins['formatting'];
-    if (formatPlugin && formatPlugin.applyFormatData) {
-      formatPlugin.applyFormatData(formatData);
-    }
+    return {};
   },
   
   // チャートデータを取得
   getChartData() {
-    // チャートプラグインからデータを取得
-    const chartPlugin = this.registry.plugins['chart'];
-    if (chartPlugin) {
+    // チャートプラグインがあれば、そのデータを取得
+    if (this.registry && this.registry.plugins && this.registry.plugins['chart']) {
+      const chartPlugin = this.registry.plugins['chart'];
       return chartPlugin.charts || [];
     }
-    
     return [];
-  },
-  
-  // チャートデータを適用
-  applyChartData(charts) {
-    if (!charts || !Array.isArray(charts) || charts.length === 0) return;
-    
-    // チャートプラグインを使用してデータを適用
-    const chartPlugin = this.registry.plugins['chart'];
-    if (chartPlugin) {
-      // チャートを初期化
-      chartPlugin.charts = [];
-      
-      // 各チャートを再作成
-      charts.forEach(chart => {
-        if (chart.dataRange && chart.type) {
-          const newChartId = chartPlugin.createChart(
-            chart.type,
-            chart.dataRange,
-            chart.position
-          );
-          
-          // IDを更新して、その他のプロパティをコピー
-          const newChart = chartPlugin.charts.find(c => c.id === newChartId);
-          if (newChart) {
-            Object.assign(newChart, chart, { id: newChartId });
-          }
-        }
-      });
-    }
   },
   
   // コメントデータを取得
   getCommentData() {
-    // CellFeaturesプラグインからコメントデータを取得
-    // ここでは直接アクセスできないため、DOM内のデータから取得する方法や
-    // グローバル変数の利用、またはイベントを使った方法を検討
+    // コメントプラグインがあれば、そのデータを取得
+    if (this.registry && this.registry.plugins && this.registry.plugins['comments']) {
+      const commentPlugin = this.registry.plugins['comments'];
+      return commentPlugin.comments || {};
+    }
     return {};
   },
   
-  // コメントデータを適用
-  applyCommentData(comments) {
-    if (!comments) return;
-  },
-  
-  // バリデーションデータを取得
+  // データ検証を取得
   getValidationData() {
-    // DataValidationプラグインからデータを取得
-    const validationPlugin = this.registry.plugins['data-validation'];
-    if (validationPlugin) {
+    // データ検証プラグインがあれば、そのデータを取得
+    if (this.registry && this.registry.plugins && this.registry.plugins['data-validation']) {
+      const validationPlugin = this.registry.plugins['data-validation'];
       return validationPlugin.validations || [];
     }
-    
     return [];
-  },
-  
-  // バリデーションデータを適用
-  applyValidationData(validations) {
-    if (!validations) return;
-    
-    // DataValidationプラグインを使用してデータを適用
-    const validationPlugin = this.registry.plugins['data-validation'];
-    if (validationPlugin) {
-      validationPlugin.validations = validations;
-    }
   }
 };
 
