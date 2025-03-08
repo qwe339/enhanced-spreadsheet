@@ -754,4 +754,421 @@ const SpreadsheetEditor = forwardRef((props, ref) => {
     
     try {
       // クリップボードからデータを取得
-      const pastedData = await pasteFromClip
+      const pastedData = await pasteFromClipboard();
+      if (!pastedData || pastedData.length === 0) {
+        setStatusMessage('貼り付けるデータがありません', 3000);
+        return;
+      }
+      
+      // 選択セルを起点にデータを貼り付け
+      const [startRow, startCol] = selectedCell[0];
+      
+      // 変更を記録
+      const changes = [];
+      
+      pastedData.forEach((row, rowIndex) => {
+        row.forEach((value, colIndex) => {
+          const targetRow = startRow + rowIndex;
+          const targetCol = startCol + colIndex;
+          
+          // データ範囲内かチェック
+          if (targetRow < data.length && targetCol < data[0].length) {
+            const oldValue = hot.getDataAtCell(targetRow, targetCol);
+            changes.push([targetRow, targetCol, oldValue, value]);
+          }
+        });
+      });
+      
+      // 一括で更新
+      if (changes.length > 0) {
+        hot.setDataAtCell(changes);
+        setStatusMessage(`${changes.length}セルを貼り付けました`, 3000);
+      }
+    } catch (error) {
+      console.error('貼り付けエラー:', error);
+      setStatusMessage('貼り付けに失敗しました', 3000);
+    }
+  }
+  
+  // 行の挿入
+  function handleInsertRow() {
+    const hot = hotRef.current?.hotInstance;
+    if (!hot) return;
+    
+    const selectedRange = hot.getSelected();
+    if (!selectedRange || selectedRange.length === 0) return;
+    
+    // 選択範囲の先頭行を取得
+    const [startRow] = selectedRange[0];
+    
+    // 行を挿入
+    hot.alter('insert_row', startRow);
+    setIsModified(true);
+    setStatusMessage(`行${startRow + 1}を挿入しました`, 3000);
+  }
+  
+  // 列の挿入
+  function handleInsertColumn() {
+    const hot = hotRef.current?.hotInstance;
+    if (!hot) return;
+    
+    const selectedRange = hot.getSelected();
+    if (!selectedRange || selectedRange.length === 0) return;
+    
+    // 選択範囲の先頭列を取得
+    const [, startCol] = selectedRange[0];
+    
+    // 列を挿入
+    hot.alter('insert_col', startCol);
+    setIsModified(true);
+    setStatusMessage(`列${numToLetter(startCol)}を挿入しました`, 3000);
+  }
+  
+  // 印刷ハンドラ
+  function handlePrint() {
+    const hot = hotRef.current?.hotInstance;
+    if (!hot) return;
+    
+    // 印刷モジュールをダイナミックインポート
+    import('../../utils/printUtils').then(({ showPrintPreview }) => {
+      showPrintPreview(hot, {
+        title: fileName,
+        fileName: fileName,
+        sheetName: currentSheetName
+      });
+    }).catch(error => {
+      console.error('印刷モジュール読み込みエラー:', error);
+      setStatusMessage('印刷機能の読み込みに失敗しました', 3000);
+    });
+  }
+  
+  // 元に戻す処理
+  function handleUndo() {
+    const hot = hotRef.current?.hotInstance;
+    if (!hot) return;
+    
+    if (hot.isUndoAvailable()) {
+      hot.undo();
+      setStatusMessage('操作を元に戻しました', 3000);
+    } else {
+      setStatusMessage('これ以上元に戻せません', 3000);
+    }
+  }
+  
+  // やり直し処理
+  function handleRedo() {
+    const hot = hotRef.current?.hotInstance;
+    if (!hot) return;
+    
+    if (hot.isRedoAvailable()) {
+      hot.redo();
+      setStatusMessage('操作をやり直しました', 3000);
+    } else {
+      setStatusMessage('これ以上やり直せません', 3000);
+    }
+  }
+  
+  // 書式の適用
+  function applyFormat(format, value) {
+    const hot = hotRef.current?.hotInstance;
+    if (!hot) return;
+    
+    const selectedRange = hot.getSelected();
+    if (!selectedRange || selectedRange.length === 0) {
+      setStatusMessage('書式を適用するセルを選択してください', 3000);
+      return;
+    }
+    
+    // カスタムイベントを発行して書式を適用
+    document.dispatchEvent(new CustomEvent('format-apply', {
+      detail: { format, value }
+    }));
+  }
+  
+  // ステータスメッセージを更新
+  function updateStatusMessage(message, timeout = 0) {
+    setStatusMessage(message);
+    
+    if (timeout > 0) {
+      setTimeout(() => {
+        setStatusMessage('準備完了');
+      }, timeout);
+    }
+  }
+  
+  return (
+    <div className="spreadsheet-editor">
+      <div className="spreadsheet-header">
+        <h1>拡張スプレッドシート</h1>
+        <span className="file-info">
+          {fileName}{isModified ? '*' : ''}
+        </span>
+      </div>
+      
+      <MenuBar 
+        items={menuItems} 
+        onMenuItemClick={props.onMenuItemClick}
+      />
+      
+      <Toolbar 
+        items={toolbarItems}
+        onClick={props.onToolbarClick}
+      />
+      
+      <FormulaBar
+        cellAddress={cellAddress}
+        value={cellValue}
+        onChange={handleFormulaChange}
+        onSubmit={handleFormulaSubmit}
+      />
+      
+      <div className="spreadsheet-grid-container">
+        <HotTable
+          ref={hotRef}
+          data={data}
+          colHeaders={true}
+          rowHeaders={true}
+          width="100%"
+          height="100%"
+          licenseKey="non-commercial-and-evaluation"
+          contextMenu={true}
+          manualColumnResize={true}
+          manualRowResize={true}
+          selectionMode="multiple"
+          afterSelection={handleSelection}
+          afterChange={handleDataChange}
+          afterGetColHeader={(col, TH) => {
+            TH.textContent = numToLetter(col);
+          }}
+          cell={(row, col) => {
+            const cellKey = `${currentSheetName}:${row},${col}`;
+            const cellStyle = cellStyles[cellKey];
+            
+            if (cellStyle) {
+              return { className: cellStyle };
+            }
+            
+            return {};
+          }}
+          afterOnCellMouseDown={(event, coords) => {
+            // プラグインフックを実行
+            if (props.onPluginHook) {
+              props.onPluginHook('cell:click', coords.row, coords.col, event);
+            }
+          }}
+          afterRender={() => {
+            // HotTableインスタンスが初期化された後に実行
+            if (props.onHotInit && hotRef.current?.hotInstance) {
+              props.onHotInit(hotRef.current.hotInstance);
+            }
+          }}
+        />
+      </div>
+      
+      <SheetTabs
+        sheets={sheets}
+        currentSheet={currentSheetName}
+        onSheetChange={handleSheetChange}
+        onAddSheet={handleAddSheet}
+        onRenameSheet={handleRenameSheet}
+        onDeleteSheet={handleDeleteSheet}
+      />
+      
+      <StatusBar
+        message={statusMessage}
+        stats={selectionStats}
+        filename={fileName}
+        lastSaved={undefined}
+        isModified={isModified}
+      />
+      
+      {showSearchModal && (
+        <SearchReplaceModal
+          onClose={() => setShowSearchModal(false)}
+          onSearch={(searchTerm, options) => {
+            // 検索機能実装
+            const hot = hotRef.current?.hotInstance;
+            if (!hot) return [];
+            
+            const results = [];
+            const searchData = hot.getData();
+            const { matchCase, wholeCell, regularExpression, jumpTo } = options || {};
+            
+            // 検索用の正規表現を作成
+            let searchRegex;
+            try {
+              if (regularExpression) {
+                searchRegex = new RegExp(searchTerm, matchCase ? 'g' : 'gi');
+              } else {
+                const escapedTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                searchRegex = new RegExp(matchCase ? escapedTerm : escapedTerm, matchCase ? 'g' : 'gi');
+              }
+            } catch (e) {
+              console.error('検索正規表現エラー:', e);
+              return [];
+            }
+            
+            // データ内を検索
+            for (let row = 0; row < searchData.length; row++) {
+              for (let col = 0; col < searchData[row].length; col++) {
+                const cellValue = searchData[row][col];
+                if (cellValue === null || cellValue === undefined) continue;
+                
+                const stringValue = String(cellValue);
+                
+                // 検索条件に合致するか確認
+                let isMatch = false;
+                
+                if (wholeCell) {
+                  // セル全体が一致するか確認
+                  isMatch = matchCase 
+                    ? stringValue === searchTerm
+                    : stringValue.toLowerCase() === searchTerm.toLowerCase();
+                } else {
+                  // 部分一致を確認
+                  isMatch = searchRegex.test(stringValue);
+                }
+                
+                if (isMatch) {
+                  results.push({
+                    row,
+                    col,
+                    value: stringValue,
+                    cellAddress: indicesToCellAddress(row, col),
+                    sheet: currentSheetName
+                  });
+                }
+              }
+            }
+            
+            // 特定の結果にジャンプする場合
+            if (jumpTo) {
+              hot.selectCell(jumpTo.row, jumpTo.col);
+            } else if (results.length > 0) {
+              hot.selectCell(results[0].row, results[0].col);
+            }
+            
+            return results;
+          }}
+          onReplace={(searchTerm, replaceTerm, target, options) => {
+            const hot = hotRef.current?.hotInstance;
+            if (!hot) return false;
+            
+            // 対象のセルの値を置換
+            const oldValue = hot.getDataAtCell(target.row, target.col);
+            if (oldValue === null || oldValue === undefined) return false;
+            
+            const stringValue = String(oldValue);
+            let newValue;
+            
+            const { matchCase, wholeCell, regularExpression } = options || {};
+            
+            if (wholeCell) {
+              // セル全体を置換
+              if (matchCase ? stringValue === searchTerm : stringValue.toLowerCase() === searchTerm.toLowerCase()) {
+                newValue = replaceTerm;
+              } else {
+                return false;
+              }
+            } else {
+              // 部分置換
+              try {
+                let searchRegex;
+                if (regularExpression) {
+                  searchRegex = new RegExp(searchTerm, matchCase ? 'g' : 'gi');
+                } else {
+                  const escapedTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                  searchRegex = new RegExp(escapedTerm, matchCase ? 'g' : 'gi');
+                }
+                
+                newValue = stringValue.replace(searchRegex, replaceTerm);
+                
+                // 実際に置換が行われたか確認
+                if (newValue === stringValue) {
+                  return false;
+                }
+              } catch (e) {
+                console.error('置換エラー:', e);
+                return false;
+              }
+            }
+            
+            // セルの値を更新
+            hot.setDataAtCell(target.row, target.col, newValue);
+            return true;
+          }}
+          onReplaceAll={(searchTerm, replaceTerm, options) => {
+            const hot = hotRef.current?.hotInstance;
+            if (!hot) return 0;
+            
+            const { matchCase, wholeCell, regularExpression } = options || {};
+            
+            try {
+              // 検索用の正規表現を作成
+              let searchRegex;
+              if (regularExpression) {
+                searchRegex = new RegExp(searchTerm, matchCase ? 'g' : 'gi');
+              } else {
+                const escapedTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                searchRegex = new RegExp(escapedTerm, matchCase ? 'g' : 'gi');
+              }
+              
+              // データを取得
+              const searchData = hot.getData();
+              let replaceCount = 0;
+              const changes = [];
+              
+              // データ内を検索して置換
+              for (let row = 0; row < searchData.length; row++) {
+                for (let col = 0; col < searchData[row].length; col++) {
+                  const cellValue = searchData[row][col];
+                  if (cellValue === null || cellValue === undefined) continue;
+                  
+                  const stringValue = String(cellValue);
+                  let newValue;
+                  let isMatch = false;
+                  
+                  if (wholeCell) {
+                    // セル全体が一致するか確認
+                    isMatch = matchCase 
+                      ? stringValue === searchTerm
+                      : stringValue.toLowerCase() === searchTerm.toLowerCase();
+                    
+                    if (isMatch) {
+                      newValue = replaceTerm;
+                    }
+                  } else {
+                    // 部分一致を確認
+                    if (searchRegex.test(stringValue)) {
+                      isMatch = true;
+                      // 正規表現をリセット
+                      searchRegex.lastIndex = 0;
+                      newValue = stringValue.replace(searchRegex, replaceTerm);
+                    }
+                  }
+                  
+                  if (isMatch && newValue !== stringValue) {
+                    changes.push([row, col, stringValue, newValue]);
+                    replaceCount++;
+                  }
+                }
+              }
+              
+              // 一括で更新
+              if (changes.length > 0) {
+                hot.setDataAtCell(changes);
+              }
+              
+              return replaceCount;
+            } catch (e) {
+              console.error('置換エラー:', e);
+              return 0;
+            }
+          }}
+        />
+      )}
+    </div>
+  );
+});
+
+export default SpreadsheetEditor;

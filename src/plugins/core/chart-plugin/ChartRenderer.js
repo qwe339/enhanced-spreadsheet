@@ -64,7 +64,7 @@ class ChartRenderer {
       
       if (headerAxis === 'column' || headerAxis === 'both') {
         // 最初の行をデータセットラベルとして使用
-        const headerRow = dataValues[0];
+        const headerData = dataValues[0] || [];
         
         // データから最初の行を除外
         dataValues = dataValues.slice(1);
@@ -72,9 +72,9 @@ class ChartRenderer {
         // 列の向きでデータセットを作成
         if (dataOrientation === 'columns') {
           datasets = [];
-          for (let i = headerAxis === 'both' ? 1 : 0; i < headerRow.length; i++) {
+          for (let i = headerAxis === 'both' ? 1 : 0; i < headerData.length; i++) {
             datasets.push({
-              label: headerRow[i] || `Dataset ${i + 1}`,
+              label: headerData[i] || `Dataset ${i + 1}`,
               data: dataValues.map(row => row[i]),
               backgroundColor: this.getColorForIndex(i),
               borderColor: this.getColorForIndex(i, 1.0),
@@ -84,7 +84,7 @@ class ChartRenderer {
         } else {
           // 行の向きの場合はラベルが列ヘッダー
           if (labels.length === 0) {
-            labels = headerRow.slice(headerAxis === 'both' ? 1 : 0);
+            labels = headerData.slice(headerAxis === 'both' ? 1 : 0);
           }
         }
       }
@@ -98,7 +98,7 @@ class ChartRenderer {
       } else {
         // 列インデックスをラベルとして使用
         labels = Array.from(
-          { length: dataValues[0].length },
+          { length: dataValues[0] ? dataValues[0].length : 0 },
           (_, index) => numToLetter(startCol + index)
         );
       }
@@ -108,9 +108,10 @@ class ChartRenderer {
     if (datasets.length === 0) {
       if (dataOrientation === 'columns') {
         // 列ごとにデータセットを作成
-        for (let i = 0; i < dataValues[0].length; i++) {
+        const columnCount = dataValues[0] ? dataValues[0].length : 0;
+        for (let i = 0; i < columnCount; i++) {
           datasets.push({
-            label: hasHeaders && headerAxis === 'column' ? `${headerRow[i]}` : `Dataset ${i + 1}`,
+            label: `Dataset ${i + 1}`,
             data: dataValues.map(row => row[i]),
             backgroundColor: this.getColorForIndex(i),
             borderColor: this.getColorForIndex(i, 1.0),

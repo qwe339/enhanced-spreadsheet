@@ -155,7 +155,7 @@ const chartPlugin = {
       if (chartId) {
         event.stopPropagation();
         
-        if (confirm('このチャートを削除してもよろしいですか？')) {
+        if (window.confirm('このチャートを削除してもよろしいですか？')) {
           this.deleteChart(chartId);
         }
       }
