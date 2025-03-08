@@ -1,52 +1,176 @@
-// file-operations/index.js
-
+// src/plugins/core/file-operations/index.js
+import FileOperationsDialog from './FileOperationsDialog';
 import Papa from 'papaparse';
+import './styles.css';
 
-class FileOperations {
-  constructor(registry) {
+const fileOperationsPlugin = {
+  name: 'ファイル操作',
+  version: '1.0.0',
+  author: 'Your Name',
+  
+  initialize(registry) {
+    console.log('File Operations plugin initialized');
     this.registry = registry;
-    this.hotInstance = null;
+    this.dialog = new FileOperationsDialog(this);
     this.currentFilename = null;
     this.isModified = false;
     
-    // イベントリスナーの設定
+    // イベントリスナーのセットアップ
     this.setupEventListeners();
-  }
+  },
+  
+  cleanup() {
+    console.log('File Operations plugin cleanup');
+    this.removeEventListeners();
+  },
   
   setupEventListeners() {
+    // ファイル操作関連のイベント
+    this.handleOpenFile = () => {
+      this.dialog.showOpenDialog();
+    };
+    
+    this.handleSaveFile = () => {
+      if (this.currentFilename) {
+        this.saveToLocalStorage(this.currentFilename);
+      } else {
+        this.dialog.showSaveAsDialog();
+      }
+    };
+    
+    this.handleSaveFileAs = () => {
+      this.dialog.showSaveAsDialog();
+    };
+    
+    this.handleImportCSV = () => {
+      this.dialog.showImportCSVDialog();
+    };
+    
+    this.handleExportCSV = () => {
+      this.exportCSV();
+    };
+    
     // CSVインポートイベント
-    document.addEventListener('spreadsheet-import-csv', (e) => {
+    this.handleImportCSVData = (e) => {
       if (e.detail && e.detail.data) {
         this.importCSVData(e.detail.data);
       }
-    });
+    };
     
-    // データ更新イベント
-    document.addEventListener('spreadsheet-data-updated', (e) => {
-      if (e.detail) {
-        this.isModified = true;
+    // イベントリスナーを登録
+    document.addEventListener('file-open', this.handleOpenFile);
+    document.addEventListener('file-save', this.handleSaveFile);
+    document.addEventListener('file-save-as', this.handleSaveFileAs);
+    document.addEventListener('file-import-csv', this.handleImportCSV);
+    document.addEventListener('file-export-csv', this.handleExportCSV);
+    document.addEventListener('spreadsheet-import-csv', this.handleImportCSVData);
+  },
+  
+  removeEventListeners() {
+    document.removeEventListener('file-open', this.handleOpenFile);
+    document.removeEventListener('file-save', this.handleSaveFile);
+    document.removeEventListener('file-save-as', this.handleSaveFileAs);
+    document.removeEventListener('file-import-csv', this.handleImportCSV);
+    document.removeEventListener('file-export-csv', this.handleExportCSV);
+    document.removeEventListener('spreadsheet-import-csv', this.handleImportCSVData);
+  },
+  
+  hooks: {
+    // メニュー拡張
+    'menu:extend': (menuConfig) => {
+      // ファイルメニューを探す
+      const fileMenuIndex = menuConfig.items.findIndex(item => item.id === 'file');
+      
+      const fileMenuItems = [
+        { id: 'new', label: '新規作成', action: () => document.dispatchEvent(new CustomEvent('file-new')) },
+        { id: 'open', label: '開く...', action: () => document.dispatchEvent(new CustomEvent('file-open')) },
+        { id: 'save', label: '保存', action: () => document.dispatchEvent(new CustomEvent('file-save')) },
+        { id: 'saveAs', label: '名前を付けて保存...', action: () => document.dispatchEvent(new CustomEvent('file-save-as')) },
+        { type: 'separator' },
+        { id: 'importCSV', label: 'CSVインポート...', action: () => document.dispatchEvent(new CustomEvent('file-import-csv')) },
+        { id: 'exportCSV', label: 'CSVエクスポート', action: () => document.dispatchEvent(new CustomEvent('file-export-csv')) },
+      ];
+      
+      if (fileMenuIndex >= 0) {
+        // 既存のファイルメニューを拡張
+        menuConfig.items[fileMenuIndex].submenu = fileMenuItems;
+      } else {
+        // 新しくファイルメニューを追加
+        menuConfig.items.unshift({
+          id: 'file',
+          label: 'ファイル',
+          submenu: fileMenuItems
+        });
       }
-    });
-  }
+      
+      return menuConfig;
+    },
+    
+    // ツールバー拡張
+    'toolbar:extend': (toolbarConfig) => {
+      // ファイル操作関連のツールバーボタンを追加
+      const fileButtons = [
+        { id: 'new', tooltip: '新規作成', icon: '📄', action: () => document.dispatchEvent(new CustomEvent('file-new')) },
+        { id: 'open', tooltip: '開く', icon: '📂', action: () => document.dispatchEvent(new CustomEvent('file-open')) },
+        { id: 'save', tooltip: '保存', icon: '💾', action: () => document.dispatchEvent(new CustomEvent('file-save')) },
+      ];
+      
+      // 先頭にファイルボタンを追加
+      toolbarConfig.items = [...fileButtons, ...toolbarConfig.items];
+      
+      return toolbarConfig;
+    },
+    
+    // メニュークリックイベント
+    'menu:click': (menuId) => {
+      switch (menuId) {
+        case 'new':
+          document.dispatchEvent(new CustomEvent('file-new'));
+          return true;
+        case 'open':
+          document.dispatchEvent(new CustomEvent('file-open'));
+          return true;
+        case 'save':
+          document.dispatchEvent(new CustomEvent('file-save'));
+          return true;
+        case 'saveAs':
+          document.dispatchEvent(new CustomEvent('file-save-as'));
+          return true;
+        case 'importCSV':
+          document.dispatchEvent(new CustomEvent('file-import-csv'));
+          return true;
+        case 'exportCSV':
+          document.dispatchEvent(new CustomEvent('file-export-csv'));
+          return true;
+        default:
+          return false;
+      }
+    }
+  },
   
-  // Handsontableインスタンスを設定
-  setHotInstance(instance) {
-    this.hotInstance = instance;
-  }
-  
-  // ステータスメッセージを表示
-  showStatusMessage(message, isError = false) {
-    if (isError) {
-      console.error(message);
-    } else {
-      console.log(message);
+  // Handsontableインスタンスを取得
+  getHotInstance() {
+    // 登録済みインスタンスの取得を試行
+    if (this.registry && this.registry.hotInstance) {
+      return this.registry.hotInstance;
     }
     
-    // カスタムイベントを発行
-    document.dispatchEvent(new CustomEvent('spreadsheet-status-message', {
-      detail: { message, isError }
-    }));
-  }
+    // グローバル変数から取得を試行
+    if (window.__hotInstance) {
+      return window.__hotInstance;
+    }
+    
+    // DOM探索による取得を試行
+    const hotContainer = document.querySelector('.spreadsheet-grid-container');
+    if (hotContainer) {
+      const handsontableEl = hotContainer.querySelector('.handsontable');
+      if (handsontableEl && handsontableEl.hotInstance) {
+        return handsontableEl.hotInstance;
+      }
+    }
+    
+    return null;
+  },
   
   // CSVデータをインポート
   importCSVData(data) {
@@ -55,9 +179,13 @@ class FileOperations {
       return;
     }
     
-    console.log('CSVデータをインポート:', data);
+    const hotInstance = this.getHotInstance();
+    if (!hotInstance) {
+      this.showStatusMessage('スプレッドシートが初期化されていません', true);
+      return;
+    }
     
-    // データ検証と前処理
+    // データの前処理
     const processedData = data.map(row => {
       if (!Array.isArray(row)) {
         // 配列でない行があれば変換
@@ -66,106 +194,30 @@ class FileOperations {
       return row;
     });
     
-    // Handsontableインスタンスの取得（複数の方法を試行）
-    const getHotInstance = () => {
-      // 登録済みインスタンスの取得を試行
-      if (this.registry && this.registry.hotInstance) {
-        console.log('Registry経由でHotInstanceを取得しました');
-        return this.registry.hotInstance;
-      }
+    try {
+      // データをロード
+      hotInstance.loadData(processedData);
       
-      // グローバル変数から取得を試行
-      if (window.__hotInstance) {
-        console.log('グローバル変数経由でHotInstanceを取得しました');
-        return window.__hotInstance;
-      }
-      
-      // DOM探索による取得を試行
-      const hotContainer = document.querySelector('.spreadsheet-grid-container');
-      if (hotContainer) {
-        const handsontableEl = hotContainer.querySelector('.handsontable');
-        if (handsontableEl && handsontableEl.hotInstance) {
-          console.log('DOM経由でHotInstanceを取得しました');
-          return handsontableEl.hotInstance;
-        }
-      }
-      
-      // 最終手段：直接アクセス
-      const hotElements = document.querySelectorAll('.handsontable');
-      for (const el of hotElements) {
-        if (el.hotInstance) {
-          console.log('DOM全探索でHotInstanceを取得しました');
-          return el.hotInstance;
-        }
-      }
-      
-      return null;
-    };
-    
-    const hotInstance = getHotInstance();
-    
-    if (hotInstance) {
-      try {
-        console.log(`データをロードします: ${processedData.length}行 x ${processedData[0]?.length || 0}列`);
-        
-        // 一時的にイベント通知を無効化
-        hotInstance.suspendExecution();
-        
-        // 明示的にデータをクリア
-        hotInstance.clear();
-        
-        // データをロード
-        hotInstance.loadData(processedData);
-        
-        // 元の状態に戻す
-        hotInstance.resumeExecution();
-        
-        // 強制的に再描画
-        hotInstance.render();
-        
-        // SpreadsheetContextの状態を更新
-        try {
-          // カスタムイベント経由でコンテキスト更新
-          document.dispatchEvent(new CustomEvent('spreadsheet-data-updated', { 
-            detail: { 
-              data: processedData,
-              sheetId: 'Sheet1', // デフォルトシート名、必要に応じて変更
-              isModified: true 
-            } 
-          }));
-        } catch (e) {
-          console.warn('コンテキスト更新エラー:', e);
-        }
-        
-        this.showStatusMessage('CSVデータをインポートしました');
-      } catch (error) {
-        console.error('CSVデータ適用エラー:', error);
-        this.showStatusMessage(`CSVデータの適用に失敗しました: ${error.message}`, true);
-        
-        // エラー詳細をコンソールに出力（デバッグ用）
-        console.debug('データサンプル:', processedData.slice(0, 3));
-        console.debug('Handsontable状態:', hotInstance.getPlugin('copyPaste').rowsLimit);
-      }
-    } else {
-      console.error('Handsontableインスタンスが見つかりません');
-      
-      // フォールバック処理
-      this.showStatusMessage('エディタの初期化が完了していません', true);
-      
-      // 代替イベント発行
-      document.dispatchEvent(new CustomEvent('spreadsheet-import-failed', { 
+      // カスタムイベント発行
+      document.dispatchEvent(new CustomEvent('spreadsheet-data-updated', { 
         detail: { 
-          reason: 'エディタが初期化されていません',
-          dataSize: `${processedData.length}行 x ${processedData[0]?.length || 0}列`
+          data: processedData,
+          sheetId: 'Sheet1',
+          isModified: true 
         } 
       }));
+      
+      this.isModified = true;
+      this.showStatusMessage('CSVデータをインポートしました');
+    } catch (error) {
+      console.error('CSVデータ適用エラー:', error);
+      this.showStatusMessage('CSVデータの適用に失敗しました', true);
     }
-  }
+  },
   
   // CSVデータをエクスポート
-  exportCSVData() {
-    const hotInstance = this.hotInstance || this.getHotInstance();
-    
+  exportCSV() {
+    const hotInstance = this.getHotInstance();
     if (!hotInstance) {
       this.showStatusMessage('エクスポートするデータがありません', true);
       return;
@@ -175,7 +227,7 @@ class FileOperations {
       // データを取得
       const data = hotInstance.getData();
       
-      // CSVにエクスポート
+      // CSVに変換
       const csv = Papa.unparse(data, {
         delimiter: ',',
         header: false,
@@ -194,7 +246,7 @@ class FileOperations {
       console.error('CSVエクスポートエラー:', error);
       this.showStatusMessage('CSVエクスポートに失敗しました', true);
     }
-  }
+  },
   
   // ファイルをダウンロード
   downloadFile(content, filename, mimeType) {
@@ -213,16 +265,13 @@ class FileOperations {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     }, 100);
-  }
+  },
   
-  // ファイルを保存
-  saveFile(filename) {
-    if (!filename) {
-      filename = this.currentFilename || 'spreadsheet';
-    }
+  // ローカルストレージにデータを保存
+  saveToLocalStorage(filename) {
+    if (!filename) return false;
     
-    const hotInstance = this.hotInstance || this.getHotInstance();
-    
+    const hotInstance = this.getHotInstance();
     if (!hotInstance) {
       this.showStatusMessage('保存するデータがありません', true);
       return false;
@@ -251,20 +300,46 @@ class FileOperations {
       this.isModified = false;
       
       this.showStatusMessage(`ファイル "${filename}" を保存しました`);
+      
+      // カスタムイベント発行
+      document.dispatchEvent(new CustomEvent('spreadsheet-file-saved', { 
+        detail: { filename } 
+      }));
+      
       return true;
     } catch (error) {
       console.error('ファイル保存エラー:', error);
       this.showStatusMessage('ファイルの保存に失敗しました', true);
       return false;
     }
-  }
+  },
   
-  // ファイルを読み込み
-  loadFile(filename) {
-    if (!filename) {
-      this.showStatusMessage('ファイル名が指定されていません', true);
-      return false;
+  // ファイルリストを更新
+  updateFileList(filename) {
+    if (!filename) return;
+    
+    try {
+      let files = [];
+      
+      // 既存のファイルリストを取得
+      const fileList = localStorage.getItem('spreadsheet_files');
+      if (fileList) {
+        files = JSON.parse(fileList);
+      }
+      
+      // ファイル名が存在しない場合のみ追加
+      if (!files.includes(filename)) {
+        files.push(filename);
+        localStorage.setItem('spreadsheet_files', JSON.stringify(files));
+      }
+    } catch (error) {
+      console.error('ファイルリスト更新エラー:', error);
     }
+  },
+  
+  // ローカルストレージからデータを読み込む
+  loadFromLocalStorage(filename) {
+    if (!filename) return false;
     
     try {
       // ローカルストレージからデータを取得
@@ -277,11 +352,9 @@ class FileOperations {
       
       const parsedData = JSON.parse(savedData);
       
-      // Handsontableインスタンスを取得
-      const hotInstance = this.hotInstance || this.getHotInstance();
-      
+      const hotInstance = this.getHotInstance();
       if (!hotInstance) {
-        this.showStatusMessage('エディタが初期化されていません', true);
+        this.showStatusMessage('スプレッドシートが初期化されていません', true);
         return false;
       }
       
@@ -307,33 +380,10 @@ class FileOperations {
       this.showStatusMessage('ファイルの読み込みに失敗しました', true);
       return false;
     }
-  }
-  
-  // ファイルリストを更新
-  updateFileList(filename) {
-    if (!filename) return;
-    
-    try {
-      let files = [];
-      
-      // 既存のファイルリストを取得
-      const fileList = localStorage.getItem('spreadsheet_files');
-      if (fileList) {
-        files = JSON.parse(fileList);
-      }
-      
-      // ファイル名が存在しない場合のみ追加
-      if (!files.includes(filename)) {
-        files.push(filename);
-        localStorage.setItem('spreadsheet_files', JSON.stringify(files));
-      }
-    } catch (error) {
-      console.error('ファイルリスト更新エラー:', error);
-    }
-  }
+  },
   
   // 保存されたファイル一覧を取得
-  getSavedFilesList() {
+  getSavedFileList() {
     try {
       const fileList = localStorage.getItem('spreadsheet_files');
       return fileList ? JSON.parse(fileList) : [];
@@ -341,65 +391,21 @@ class FileOperations {
       console.error('ファイルリスト取得エラー:', error);
       return [];
     }
-  }
+  },
   
-  // ファイルを削除
-  deleteFile(filename) {
-    if (!filename) return false;
-    
-    try {
-      // ローカルストレージからファイルを削除
-      localStorage.removeItem(`spreadsheet_${filename}`);
-      
-      // ファイルリストを更新
-      const files = this.getSavedFilesList().filter(file => file !== filename);
-      localStorage.setItem('spreadsheet_files', JSON.stringify(files));
-      
-      // 現在開いているファイルが削除された場合
-      if (this.currentFilename === filename) {
-        this.currentFilename = null;
-      }
-      
-      this.showStatusMessage(`ファイル "${filename}" を削除しました`);
-      return true;
-    } catch (error) {
-      console.error('ファイル削除エラー:', error);
-      this.showStatusMessage('ファイルの削除に失敗しました', true);
-      return false;
+  // ステータスメッセージを表示
+  showStatusMessage(message, isError = false) {
+    if (isError) {
+      console.error(message);
+    } else {
+      console.log(message);
     }
+    
+    // カスタムイベントを発行
+    document.dispatchEvent(new CustomEvent('spreadsheet-status-message', {
+      detail: { message, isError }
+    }));
   }
-  
-  // Handsontableインスタンスを取得
-  getHotInstance() {
-    // 登録済みインスタンスの取得を試行
-    if (this.registry && this.registry.hotInstance) {
-      return this.registry.hotInstance;
-    }
-    
-    // グローバル変数から取得を試行
-    if (window.__hotInstance) {
-      return window.__hotInstance;
-    }
-    
-    // DOM探索による取得を試行
-    const hotContainer = document.querySelector('.spreadsheet-grid-container');
-    if (hotContainer) {
-      const handsontableEl = hotContainer.querySelector('.handsontable');
-      if (handsontableEl && handsontableEl.hotInstance) {
-        return handsontableEl.hotInstance;
-      }
-    }
-    
-    // 最終手段：直接アクセス
-    const hotElements = document.querySelectorAll('.handsontable');
-    for (const el of hotElements) {
-      if (el.hotInstance) {
-        return el.hotInstance;
-      }
-    }
-    
-    return null;
-  }
-}
+};
 
-export default FileOperations;
+export default fileOperationsPlugin;

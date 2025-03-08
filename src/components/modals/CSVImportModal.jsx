@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+// src/components/modals/CSVImportModal.jsx
+import React, { useState, useEffect, useCallback } from 'react';
 import Modal from './Modal';
 import Papa from 'papaparse';
 
@@ -13,9 +14,10 @@ const CSVImportModal = ({ onClose, onImport }) => {
   const [previewData, setPreviewData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [fileInfo, setFileInfo] = useState(null);
 
   // ファイル選択時の処理
-  const handleFileChange = async (e) => {
+  const handleFileChange = useCallback(async (e) => {
     const selectedFile = e.target.files[0];
     if (!selectedFile) return;
     
@@ -24,6 +26,12 @@ const CSVImportModal = ({ onClose, onImport }) => {
     setError('');
     
     try {
+      setFileInfo({
+        name: selectedFile.name,
+        size: formatFileSize(selectedFile.size),
+        type: selectedFile.type || 'text/csv'
+      });
+      
       // 文字コードを自動検出
       const detectedEncoding = encoding === 'auto' 
         ? await detectEncoding(selectedFile) 
@@ -43,23 +51,7 @@ const CSVImportModal = ({ onClose, onImport }) => {
           : delimiter;
         
         // プレビュー用にCSVをパース
-        Papa.parse(content, {
-          delimiter: effectiveDelimiter,
-          header: header,
-          encoding: detectedEncoding,
-          preview: 5,
-          skipEmptyLines: true,
-          transformHeader: (header) => header.trim(),
-          complete: (results) => {
-            setPreviewData(results.data);
-            setLoading(false);
-          },
-          error: (error) => {
-            console.error('プレビュー生成エラー:', error);
-            setError(`プレビューの生成に失敗しました: ${error.message}`);
-            setLoading(false);
-          }
-        });
+        parseCSVPreview(content, effectiveDelimiter, detectedEncoding);
       };
       
       reader.onerror = (error) => {
@@ -73,7 +65,43 @@ const CSVImportModal = ({ onClose, onImport }) => {
       setError(`ファイルの処理に失敗しました: ${error.message}`);
       setLoading(false);
     }
-  };
+  }, [delimiter, encoding]);
+
+  // CSVプレビューのパース
+  const parseCSVPreview = useCallback((content, delimiter, encoding) => {
+    Papa.parse(content, {
+      delimiter: delimiter,
+      header: header,
+      encoding: encoding,
+      preview: 5,
+      skipEmptyLines: true,
+      transformHeader: (header) => header.trim(),
+      complete: (results) => {
+        setPreviewData(results.data);
+        setLoading(false);
+        
+        // 検出した区切り文字を表示
+        if (delimiter === 'auto') {
+          setDelimiter(detectDelimiters(content));
+        }
+      },
+      error: (error) => {
+        console.error('プレビュー生成エラー:', error);
+        setError(`プレビューの生成に失敗しました: ${error.message}`);
+        setLoading(false);
+      }
+    });
+  }, [header]);
+
+  // ヘッダー設定が変更された場合のプレビュー更新
+  useEffect(() => {
+    if (csvContent && !loading) {
+      const effectiveDelimiter = delimiter === 'auto' 
+        ? detectDelimiters(csvContent) 
+        : delimiter;
+      parseCSVPreview(csvContent, effectiveDelimiter, encoding);
+    }
+  }, [csvContent, delimiter, encoding, header, loading, parseCSVPreview]);
 
   // 文字コードの自動検出
   const detectEncoding = async (file) => {
@@ -119,10 +147,21 @@ const CSVImportModal = ({ onClose, onImport }) => {
     };
     
     // 最も頻出する区切り文字を選択
-    return Object.entries(delimiters)
+    const detected = Object.entries(delimiters)
       .sort((a, b) => b[1] - a[1])
       .filter(([_, count]) => count > 0)
       .map(([delimiter]) => delimiter)[0] || ',';
+      
+    return detected;
+  };
+  
+  // ファイルサイズのフォーマット
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   // インポート実行
@@ -135,23 +174,18 @@ const CSVImportModal = ({ onClose, onImport }) => {
     setLoading(true);
     
     try {
-      // 文字コード自動検出
-      const detectedEncoding = encoding === 'auto' 
-        ? await detectEncoding(file) 
-        : encoding;
-      
       // 区切り文字の自動検出
       const effectiveDelimiter = delimiter === 'auto' 
         ? detectDelimiters(csvContent) 
         : delimiter;
       
-      console.log(`インポート設定: 区切り文字="${effectiveDelimiter}", エンコーディング="${detectedEncoding}", ヘッダー=${header}, 開始行=${startingRow}`);
+      console.log(`インポート設定: 区切り文字="${effectiveDelimiter}", エンコーディング="${encoding}", ヘッダー=${header}, 開始行=${startingRow}`);
       
       // CSVをパース
       Papa.parse(csvContent, {
         delimiter: effectiveDelimiter,
         header: header,
-        encoding: detectedEncoding,
+        encoding: encoding,
         skipEmptyLines: true,
         transformHeader: (header) => header.trim(),
         dynamicTyping: true, // 数値を自動的に変換
@@ -203,6 +237,13 @@ const CSVImportModal = ({ onClose, onImport }) => {
           
           console.log(`インポートデータ: ${filteredData.length}行 × ${filteredData[0].length}列`);
           
+          // インポート成功イベントをコンソールに出力
+          console.log('CSVインポート成功:', {
+            rows: filteredData.length,
+            columns: filteredData[0].length,
+            filename: file.name
+          });
+          
           // インポート処理実行
           onImport(filteredData);
           onClose();
@@ -237,6 +278,13 @@ const CSVImportModal = ({ onClose, onImport }) => {
             onChange={handleFileChange}
             className="file-input"
           />
+          {fileInfo && (
+            <div className="file-info">
+              <p><strong>ファイル名:</strong> {fileInfo.name}</p>
+              <p><strong>サイズ:</strong> {fileInfo.size}</p>
+              <p><strong>タイプ:</strong> {fileInfo.type}</p>
+            </div>
+          )}
         </div>
         
         <div className="form-group">
@@ -245,6 +293,7 @@ const CSVImportModal = ({ onClose, onImport }) => {
             value={delimiter} 
             onChange={(e) => setDelimiter(e.target.value)}
             className="form-control"
+            disabled={loading}
           >
             <option value="auto">自動検出</option>
             <option value=",">カンマ (,)</option>
@@ -259,6 +308,7 @@ const CSVImportModal = ({ onClose, onImport }) => {
             value={encoding} 
             onChange={(e) => setEncoding(e.target.value)}
             className="form-control"
+            disabled={loading}
           >
             <option value="auto">自動検出</option>
             <option value="UTF-8">UTF-8</option>
@@ -276,7 +326,9 @@ const CSVImportModal = ({ onClose, onImport }) => {
             onChange={(e) => setStartingRow(e.target.value)}
             min="1"
             className="form-control"
+            disabled={loading}
           />
+          <small className="form-text">1から始まる行番号を指定してください。</small>
         </div>
         
         <div className="form-group checkbox-group">
@@ -285,14 +337,25 @@ const CSVImportModal = ({ onClose, onImport }) => {
               type="checkbox" 
               checked={header} 
               onChange={(e) => setHeader(e.target.checked)}
+              disabled={loading}
             />
             1行目をヘッダーとして使用
           </label>
+          <small className="form-text">
+            チェックした場合、1行目（または指定した開始行）がヘッダー行として処理されます。
+          </small>
         </div>
+        
+        {loading && (
+          <div className="loading-indicator">
+            <div className="spinner"></div>
+            <p>CSVデータを処理中...</p>
+          </div>
+        )}
         
         {previewData.length > 0 && (
           <div className="preview-section">
-            <h4>プレビュー</h4>
+            <h4>プレビュー (最初の5行)</h4>
             <div className="preview-table-container">
               <table className="preview-table">
                 <tbody>
@@ -315,6 +378,9 @@ const CSVImportModal = ({ onClose, onImport }) => {
                 </tbody>
               </table>
             </div>
+            <p className="preview-note">
+              注意: 実際のインポートではすべての行が処理されます。
+            </p>
           </div>
         )}
       </div>
@@ -338,5 +404,63 @@ const CSVImportModal = ({ onClose, onImport }) => {
     </Modal>
   );
 };
+
+// CSVインポートモーダル用のスタイルをここに追加
+const styles = `
+  .file-info {
+    margin-top: 10px;
+    padding: 8px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+  
+  .file-info p {
+    margin: 4px 0;
+  }
+  
+  .loading-indicator {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  
+  .spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #3498db;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    animation: spin 1s linear infinite;
+    margin-bottom: 10px;
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  
+  .preview-note {
+    font-size: 12px;
+    font-style: italic;
+    color: #666;
+    margin-top: 8px;
+  }
+  
+  .form-text {
+    font-size: 12px;
+    color: #666;
+    margin-top: 4px;
+  }
+`;
+
+// スタイルを動的に追加
+if (typeof document !== 'undefined') {
+  const styleElement = document.createElement('style');
+  styleElement.textContent = styles;
+  document.head.appendChild(styleElement);
+}
 
 export default CSVImportModal;

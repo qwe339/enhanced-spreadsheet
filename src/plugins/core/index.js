@@ -1,4 +1,7 @@
-import DataValidationDialog from '../../components/modals/DataValidationDialog';
+// src/plugins/core/data-validation/index.js
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import './styles.css';
 
 const dataValidationPlugin = {
   name: 'データ検証',
@@ -9,7 +12,7 @@ const dataValidationPlugin = {
     console.log('Data Validation plugin initialized');
     this.registry = registry;
     this.validations = [];
-    this.dialog = null;
+    this.dialogRoot = null;
     
     // イベントリスナーのセットアップ
     this.setupEventListeners();
@@ -18,6 +21,7 @@ const dataValidationPlugin = {
   cleanup() {
     console.log('Data Validation plugin cleanup');
     this.removeEventListeners();
+    this.closeDialog();
   },
   
   setupEventListeners() {
@@ -36,41 +40,45 @@ const dataValidationPlugin = {
   hooks: {
     // メニュー拡張
     'menu:extend': (menuConfig) => {
-      // データメニューにデータ検証オプションを追加
-      const dataMenu = menuConfig.items.find(item => item.id === 'data');
-      if (dataMenu && dataMenu.items) {
-        const validationMenuIndex = dataMenu.items.findIndex(item => item.id === 'dataValidation');
-        
-        if (validationMenuIndex >= 0) {
-          dataMenu.items[validationMenuIndex].action = () => {
-            document.dispatchEvent(new CustomEvent('show-data-validation-dialog'));
-          };
-        } else {
-          dataMenu.items.push({
-            id: 'dataValidation',
-            label: 'データ検証',
-            action: () => {
-              document.dispatchEvent(new CustomEvent('show-data-validation-dialog'));
-            }
-          });
+      // データメニューを探す
+      const dataMenuIndex = menuConfig.items.findIndex(item => item.id === 'data');
+      
+      const validationMenuItem = {
+        id: 'dataValidation',
+        label: 'データ検証',
+        action: () => document.dispatchEvent(new CustomEvent('show-data-validation-dialog'))
+      };
+      
+      if (dataMenuIndex >= 0) {
+        // 既存のデータメニューに追加
+        if (!menuConfig.items[dataMenuIndex].submenu) {
+          menuConfig.items[dataMenuIndex].submenu = [];
         }
+        
+        menuConfig.items[dataMenuIndex].submenu.push(validationMenuItem);
       } else {
-        // データメニューがない場合は新しく追加
+        // データメニューを新規作成
         menuConfig.items.push({
           id: 'data',
           label: 'データ',
-          items: [
-            {
-              id: 'dataValidation',
-              label: 'データ検証',
-              action: () => {
-                document.dispatchEvent(new CustomEvent('show-data-validation-dialog'));
-              }
-            }
-          ]
+          submenu: [validationMenuItem]
         });
       }
+      
       return menuConfig;
+    },
+    
+    // ツールバー拡張
+    'toolbar:extend': (toolbarConfig) => {
+      // データ検証ボタンを追加
+      toolbarConfig.items.push({
+        id: 'data-validation',
+        tooltip: 'データ検証',
+        icon: '✓',
+        action: () => document.dispatchEvent(new CustomEvent('show-data-validation-dialog'))
+      });
+      
+      return toolbarConfig;
     },
     
     // データ変更前の検証
@@ -142,113 +150,7 @@ const dataValidationPlugin = {
     }
   },
   
-  // 検証ダイアログを表示
-  showValidationDialog() {
-    const hot = this.registry.hotInstance;
-    if (!hot) {
-      console.warn('Handsontableインスタンスが見つかりません');
-      return;
-    }
-    
-    // 選択範囲を取得
-    const selected = hot.getSelected();
-    if (!selected || selected.length === 0) {
-      alert('データ検証を適用するセルを選択してください');
-      return;
-    }
-    
-    // 最初の選択範囲を使用
-    const [startRow, startCol, endRow, endCol] = selected[0];
-    const range = {
-      startRow: Math.min(startRow, endRow),
-      startCol: Math.min(startCol, endCol),
-      endRow: Math.max(startRow, endRow),
-      endCol: Math.max(startCol, endCol)
-    };
-    
-    // 既存の検証ルールを確認
-    const existingValidation = this.findValidationForCell(range.startRow, range.startCol);
-    
-    // モーダルを表示するためにReactコンポーネントを作成
-    this.renderValidationDialog(range, existingValidation);
-  },
-  
-  // 検証ダイアログをレンダリング
-  renderValidationDialog(range, existingValidation = null) {
-    // ダイアログのルート要素を作成
-    const dialogRoot = document.createElement('div');
-    dialogRoot.id = 'validation-dialog-root';
-    document.body.appendChild(dialogRoot);
-    
-    // ダイアログを閉じる関数
-    const closeDialog = () => {
-      if (dialogRoot.parentNode) {
-        document.body.removeChild(dialogRoot);
-      }
-    };
-    
-    // 適用ボタンのハンドラ
-    const handleApply = (rule) => {
-      this.addValidation(range, rule);
-      closeDialog();
-    };
-    
-    // ReactDOM.renderの代わりにReactDOMのcreateRootを使用する
-    import('react-dom/client').then(({ createRoot }) => {
-      import('react').then((React) => {
-        import('../../components/modals/DataValidationDialog').then(({ default: DataValidationDialog }) => {
-          const root = createRoot(dialogRoot);
-          root.render(
-            React.createElement(DataValidationDialog, {
-              onClose: closeDialog,
-              onApply: handleApply,
-              selectedRange: range,
-              initialRule: existingValidation ? existingValidation.rule : null
-            })
-          );
-        }).catch(error => {
-          console.error('DataValidationDialogのロードに失敗:', error);
-          closeDialog();
-        });
-      }).catch(error => {
-        console.error('Reactのロードに失敗:', error);
-        closeDialog();
-      });
-    }).catch(error => {
-      console.error('ReactDOMのロードに失敗:', error);
-      closeDialog();
-    });
-  },
-  
-  // 検証ルールを追加
-  addValidation(range, rule) {
-    if (!range || !rule) return null;
-    
-    const validation = {
-      id: `validation-${Date.now()}`,
-      range,
-      rule
-    };
-    
-    // 重複するルールを削除
-    this.validations = this.validations.filter(v => 
-      !(this.rangesOverlap(v.range, range))
-    );
-    
-    this.validations.push(validation);
-    
-    console.log('検証ルールを追加:', validation);
-    
-    // グリッドを再描画
-    const hot = this.registry.hotInstance;
-    if (hot) {
-      hot.render();
-    }
-    
-    return validation.id;
-  },
-  
-  // 特定のセルに適用される検証ルールを検索
+  // セルに適用される検証ルールを探す
   findValidationForCell(row, col) {
     return this.validations.find(validation => {
       const { range } = validation;
@@ -367,7 +269,7 @@ const dataValidationPlugin = {
         }
         
         try {
-          // 安全ではないが、デモ用に実装
+          // 式の評価 (注意: 実際の実装ではより安全な方法を使用すべき)
           const result = new Function('value', `return ${rule.expression}`)(value);
           return { 
             isValid: Boolean(result), 
@@ -384,6 +286,101 @@ const dataValidationPlugin = {
       default:
         return { isValid: true };
     }
+  },
+  
+  // 検証ダイアログを表示
+  showValidationDialog() {
+    // Handsontableインスタンスを取得
+    const hot = this.registry.hotInstance;
+    if (!hot) {
+      console.warn('Handsontableインスタンスが見つかりません');
+      return;
+    }
+    
+    // 選択範囲を取得
+    const selected = hot.getSelected();
+    if (!selected || selected.length === 0) {
+      alert('データ検証を適用するセルを選択してください');
+      return;
+    }
+    
+    // 最初の選択範囲を使用
+    const [startRow, startCol, endRow, endCol] = selected[0];
+    const range = {
+      startRow: Math.min(startRow, endRow),
+      startCol: Math.min(startCol, endCol),
+      endRow: Math.max(startRow, endRow),
+      endCol: Math.max(startCol, endCol)
+    };
+    
+    // 既存の検証ルールを確認
+    const existingValidation = this.findValidationForCell(range.startRow, range.startCol);
+    
+    // 既存のダイアログがあれば閉じる
+    this.closeDialog();
+    
+    // 新しいダイアログルートを作成
+    this.dialogRoot = document.createElement('div');
+    this.dialogRoot.id = 'data-validation-dialog-root';
+    document.body.appendChild(this.dialogRoot);
+    
+    // DataValidationDialog コンポーネントを動的にインポート
+    import('../../components/modals/DataValidationDialog').then(({ default: DataValidationDialog }) => {
+      // React 18のcreateRootを使用
+      const root = createRoot(this.dialogRoot);
+      
+      // ダイアログレンダリング
+      root.render(
+        <DataValidationDialog
+          onClose={() => this.closeDialog()}
+          onApply={(rule) => this.addValidation(range, rule)}
+          selectedRange={range}
+          initialRule={existingValidation ? existingValidation.rule : null}
+        />
+      );
+    }).catch(error => {
+      console.error('DataValidationDialogのロードに失敗:', error);
+      this.closeDialog();
+      alert('データ検証ダイアログを表示できませんでした');
+    });
+  },
+  
+  // ダイアログを閉じる
+  closeDialog() {
+    if (this.dialogRoot) {
+      if (document.body.contains(this.dialogRoot)) {
+        document.body.removeChild(this.dialogRoot);
+      }
+      this.dialogRoot = null;
+    }
+  },
+  
+  // 検証ルールを追加
+  addValidation(range, rule) {
+    if (!range || !rule) return null;
+    
+    const validation = {
+      id: `validation-${Date.now()}`,
+      range,
+      rule
+    };
+    
+    // 重複するルールを削除
+    this.validations = this.validations.filter(v => 
+      !(this.rangesOverlap(v.range, range))
+    );
+    
+    this.validations.push(validation);
+    
+    console.log('検証ルールを追加:', validation);
+    
+    // グリッドを再描画
+    const hot = this.registry.hotInstance;
+    if (hot) {
+      hot.render();
+    }
+    
+    return validation.id;
   },
   
   // 範囲が重複しているかチェック
