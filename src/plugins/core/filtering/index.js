@@ -5,21 +5,22 @@ import './styles.css';
 const filteringPlugin = {
   name: 'データフィルタリング',
   version: '1.0.0',
-  author: 'Your Name',
+  author: '開発者名',
   
   initialize(registry) {
-    console.log('Filtering plugin initialized');
+    console.log('フィルタリングプラグインが初期化されました');
     this.registry = registry;
     this.filters = {};
     this.dialogInstance = new FilterDialog(this);
     this.filteredData = null;
+    this.hiddenRows = [];
     
     // イベントリスナーのセットアップ
     this.setupEventListeners();
   },
   
   cleanup() {
-    console.log('Filtering plugin cleanup');
+    console.log('フィルタリングプラグインがクリーンアップされました');
     this.removeEventListeners();
     this.clearAllFilters();
   },
@@ -37,6 +38,7 @@ const filteringPlugin = {
           this.showFilterDialog(selectedRange.startCol);
         } else {
           console.warn('フィルタリングするカラムが選択されていません');
+          alert('フィルターを適用するカラムを選択してください');
         }
       }
     };
@@ -75,7 +77,8 @@ const filteringPlugin = {
     // メニュー拡張
     'menu:extend': (menuConfig) => {
       // データメニューを探す
-      const dataMenuIndex = menuConfig.items.findIndex(item => item.id === 'data');
+      const dataMenuIndex = menuConfig.items.findIndex(item => 
+        item.id === 'data' || item.id === 'データ');
       
       const filterMenuItem = {
         id: 'filter',
@@ -83,24 +86,36 @@ const filteringPlugin = {
         action: () => document.dispatchEvent(new CustomEvent('show-filter-dialog'))
       };
       
+      const clearFilterMenuItem = {
+        id: 'clearFilters',
+        label: 'フィルターをクリア',
+        action: () => document.dispatchEvent(new CustomEvent('clear-filter'))
+      };
+      
+      const filterMenuItems = [
+        filterMenuItem,
+        clearFilterMenuItem
+      ];
+      
       if (dataMenuIndex >= 0) {
         // 既存のデータメニューに追加
         if (!menuConfig.items[dataMenuIndex].submenu) {
           menuConfig.items[dataMenuIndex].submenu = [];
         }
         
-        // フィルターメニューがあるか確認
-        const filterIndex = menuConfig.items[dataMenuIndex].submenu.findIndex(item => item.id === 'filter');
-        
-        if (filterIndex === -1) {
-          menuConfig.items[dataMenuIndex].submenu.push(filterMenuItem);
+        // セパレーターを追加
+        if (menuConfig.items[dataMenuIndex].submenu.length > 0) {
+          menuConfig.items[dataMenuIndex].submenu.push({ type: 'separator' });
         }
+        
+        // フィルターメニュー項目を追加
+        menuConfig.items[dataMenuIndex].submenu.push(...filterMenuItems);
       } else {
         // データメニューを新規作成
         menuConfig.items.push({
           id: 'data',
           label: 'データ',
-          submenu: [filterMenuItem]
+          submenu: filterMenuItems
         });
       }
       
@@ -110,12 +125,15 @@ const filteringPlugin = {
     // ツールバー拡張
     'toolbar:extend': (toolbarConfig) => {
       // フィルターボタンを追加
-      toolbarConfig.items.push({
-        id: 'filter',
-        tooltip: 'フィルター',
-        icon: '🔍',
-        action: () => document.dispatchEvent(new CustomEvent('show-filter-dialog'))
-      });
+      toolbarConfig.items.push(
+        { type: 'separator' },
+        {
+          id: 'filter',
+          tooltip: 'フィルター',
+          icon: '🔍',
+          action: () => document.dispatchEvent(new CustomEvent('show-filter-dialog'))
+        }
+      );
       
       return toolbarConfig;
     },
@@ -141,7 +159,7 @@ const filteringPlugin = {
         if (this && this.hasFilterForColumn(col)) {
           items.push({
             key: 'clear_filter',
-            name: 'フィルターをクリア',
+            name: 'この列のフィルターをクリア',
             callback: () => {
               document.dispatchEvent(new CustomEvent('clear-filter', {
                 detail: { col }
@@ -151,21 +169,37 @@ const filteringPlugin = {
         }
       }
       
+      // すべてのセルで、フィルターがある場合はクリアオプションを追加
+      if (this && Object.keys(this.filters).length > 0) {
+        items.push({
+          key: 'clear_all_filters',
+          name: 'すべてのフィルターをクリア',
+          callback: () => {
+            document.dispatchEvent(new CustomEvent('clear-filter'));
+          }
+        });
+      }
+      
       return items;
     },
     
-    // データを取得する前のフック
-    'data:beforeGetData': (originalCallback) => {
-      return (row, column, prop) => {
-        const value = originalCallback(row, column, prop);
+    // セルレンダリングをカスタマイズ
+    'cell:render': (cellData, cellElement, rowIndex, colIndex) => {
+      // フィルター適用済みカラムのヘッダースタイル
+      if (rowIndex === -1 && this && this.hasFilterForColumn(colIndex)) {
+        cellElement.classList.add('filtered-column');
         
-        // フィルタリングが適用されている場合は、そのデータを使用
-        if (this.filteredData) {
-          return this.filteredData[row] ? this.filteredData[row][column] : value;
+        // フィルターアイコンを追加
+        if (!cellElement.querySelector('.filter-indicator')) {
+          const indicator = document.createElement('span');
+          indicator.className = 'filter-indicator';
+          indicator.innerHTML = '🔍';
+          indicator.title = 'フィルターが適用されています';
+          cellElement.appendChild(indicator);
         }
-        
-        return value;
-      };
+      }
+      
+      return false; // 標準レンダリングを続行
     }
   },
   
@@ -207,6 +241,9 @@ const filteringPlugin = {
     // データをフィルタリング
     this.applyFilters();
     
+    // フィルターが適用されたことを示す視覚的フィードバック
+    this.updateFilterIndicators();
+    
     // ステータスメッセージ更新
     this.updateStatusMessage(`列 ${hotInstance.getColHeader(col)} にフィルターを適用しました`);
   },
@@ -221,34 +258,41 @@ const filteringPlugin = {
     
     // フィルターがない場合
     if (Object.keys(this.filters).length === 0) {
-      this.filteredData = null;
-      hotInstance.render();
+      this.hiddenRows = [];
+      this.updateHiddenRows();
       return;
     }
     
-    // データのフィルタリング
-    this.filteredData = originalData.filter(row => {
+    // 非表示にする行を特定
+    this.hiddenRows = [];
+    for (let rowIndex = 0; rowIndex < originalData.length; rowIndex++) {
+      const row = originalData[rowIndex];
       // すべてのフィルター条件を満たすか確認
-      return Object.entries(this.filters).every(([col, filter]) => {
+      const matchesAllFilters = Object.entries(this.filters).every(([col, filter]) => {
         const colIndex = parseInt(col, 10);
         const cellValue = row[colIndex];
         
         return this.matchesFilter(cellValue, filter.type, filter.value);
       });
-    });
-    
-    // 非表示行の設定
-    const rowsToHide = [];
-    originalData.forEach((row, index) => {
-      if (!this.filteredData.includes(row)) {
-        rowsToHide.push(index);
+      
+      if (!matchesAllFilters) {
+        this.hiddenRows.push(rowIndex);
       }
-    });
+    }
+    
+    // 非表示行を設定
+    this.updateHiddenRows();
+  },
+  
+  // 非表示行の設定を更新
+  updateHiddenRows() {
+    const hotInstance = this.getHotInstance();
+    if (!hotInstance) return;
     
     // 行の表示/非表示を設定
     hotInstance.updateSettings({
       hiddenRows: {
-        rows: rowsToHide,
+        rows: this.hiddenRows,
         indicators: true
       }
     });
@@ -257,22 +301,65 @@ const filteringPlugin = {
     hotInstance.render();
   },
   
+  // フィルターインジケーターを更新
+  updateFilterIndicators() {
+    const hotInstance = this.getHotInstance();
+    if (!hotInstance) return;
+    
+    // すべての列ヘッダーのフィルターインジケーターをリセット
+    const colCount = hotInstance.countCols();
+    for (let col = 0; col < colCount; col++) {
+      const th = hotInstance.getColHeader(col, true);
+      if (th) {
+        th.classList.remove('filtered-column');
+        const indicator = th.querySelector('.filter-indicator');
+        if (indicator) {
+          th.removeChild(indicator);
+        }
+      }
+    }
+    
+    // フィルターが適用されている列にインジケーターを追加
+    Object.keys(this.filters).forEach(col => {
+      const colIndex = parseInt(col, 10);
+      const th = hotInstance.getColHeader(colIndex, true);
+      if (th) {
+        th.classList.add('filtered-column');
+        
+        if (!th.querySelector('.filter-indicator')) {
+          const indicator = document.createElement('span');
+          indicator.className = 'filter-indicator';
+          indicator.innerHTML = '🔍';
+          indicator.title = 'フィルターが適用されています';
+          th.appendChild(indicator);
+        }
+      }
+    });
+  },
+  
   // フィルター条件にマッチするか確認
   matchesFilter(value, filterType, filterValue) {
-    if (value === null || value === undefined) return false;
+    if (value === null || value === undefined) {
+      // 空の値の特別処理
+      return filterType === 'empty' ||
+             (filterType === 'values' && filterValue.includes('')) ||
+             (filterType === 'notEquals' && String(filterValue) !== '');
+    }
+    
+    const stringValue = String(value);
     
     switch (filterType) {
       case 'equals':
-        return String(value) === String(filterValue);
+        return stringValue === String(filterValue);
       
       case 'notEquals':
-        return String(value) !== String(filterValue);
+        return stringValue !== String(filterValue);
       
       case 'contains':
-        return String(value).includes(String(filterValue));
+        return stringValue.includes(String(filterValue));
       
       case 'notContains':
-        return !String(value).includes(String(filterValue));
+        return !stringValue.includes(String(filterValue));
       
       case 'greaterThan':
         return Number(value) > Number(filterValue);
@@ -291,13 +378,16 @@ const filteringPlugin = {
         return value !== '' && value !== null && value !== undefined;
       
       case 'startsWith':
-        return String(value).startsWith(String(filterValue));
+        return stringValue.startsWith(String(filterValue));
       
       case 'endsWith':
-        return String(value).endsWith(String(filterValue));
+        return stringValue.endsWith(String(filterValue));
       
       case 'values':
-        return Array.isArray(filterValue) && filterValue.includes(String(value));
+        // 複数の選択肢から一致するものを検索
+        return Array.isArray(filterValue) && 
+              (filterValue.includes(stringValue) || 
+               (value === '' && filterValue.includes(null)));
       
       default:
         return true;
@@ -314,6 +404,9 @@ const filteringPlugin = {
     // 残りのフィルターを適用
     this.applyFilters();
     
+    // フィルターインジケーターを更新
+    this.updateFilterIndicators();
+    
     // ステータスメッセージ更新
     const hotInstance = this.getHotInstance();
     if (hotInstance) {
@@ -323,23 +416,20 @@ const filteringPlugin = {
   
   // すべてのフィルターをクリア
   clearAllFilters() {
+    if (Object.keys(this.filters).length === 0) return;
+    
     // フィルターをリセット
     this.filters = {};
-    this.filteredData = null;
+    this.hiddenRows = [];
     
     // グリッドを更新
-    const hotInstance = this.getHotInstance();
-    if (hotInstance) {
-      hotInstance.updateSettings({
-        hiddenRows: {
-          rows: [],
-          indicators: false
-        }
-      });
-      
-      hotInstance.render();
-      this.updateStatusMessage('すべてのフィルターをクリアしました');
-    }
+    this.updateHiddenRows();
+    
+    // フィルターインジケーターを更新
+    this.updateFilterIndicators();
+    
+    // ステータスメッセージ更新
+    this.updateStatusMessage('すべてのフィルターをクリアしました');
   },
   
   // 特定の列にフィルターがあるか確認
@@ -381,6 +471,14 @@ const filteringPlugin = {
     const hotContainer = document.querySelector('.handsontable');
     if (hotContainer && hotContainer.hotInstance) {
       return hotContainer.hotInstance;
+    }
+    
+    const spreadsheetGridContainer = document.querySelector('.spreadsheet-grid-container');
+    if (spreadsheetGridContainer) {
+      const hotElement = spreadsheetGridContainer.querySelector('.handsontable');
+      if (hotElement && hotElement.hotInstance) {
+        return hotElement.hotInstance;
+      }
     }
     
     return null;
