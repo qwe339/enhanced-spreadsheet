@@ -1,0 +1,200 @@
+/* src/plugins/core/filtering/styles.css */
+/* フィルターダイアログ */
+.filter-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+}
+
+.filter-dialog {
+  width: 500px;
+  max-width: 90vw;
+  max-height: 80vh;
+  background-color: white;
+  border-radius: 6px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+}
+
+.filter-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #eee;
+}
+
+.filter-dialog-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.filter-dialog-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: #666;
+}
+
+.filter-dialog-body {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.filter-dialog-footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-top: 1px solid #eee;
+}
+
+.filter-footer-right {
+  display: flex;
+  gap: 10px;
+}
+
+.filter-form-group {
+  margin-bottom: 16px;
+}
+
+.filter-form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.filter-input,
+.filter-select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.filter-range-inputs {
+  display: flex;
+  gap: 16px;
+}
+
+.filter-range-inputs > div {
+  flex: 1;
+}
+
+.filter-button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.filter-button-primary {
+  background-color: #1976d2;
+  color: white;
+}
+
+.filter-button-primary:hover {
+  background-color: #1565c0;
+}
+
+.filter-button-secondary {
+  background-color: #f5f5f5;
+  color: #333;
+  border: 1px solid #ddd;
+}
+
+.filter-button-secondary:hover {
+  background-color: #e0e0e0;
+}
+
+.filter-button-small {
+  padding: 4px 8px;
+  font-size: 12px;
+  background-color: #f5f5f5;
+  color: #333;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.filter-button-small:hover {
+  background-color: #e0e0e0;
+}
+
+.filter-values-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.filter-values-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.filter-values-list {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.filter-value-item {
+  padding: 4px 0;
+}
+
+.filter-value-item label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: normal;
+  margin: 0;
+}
+
+.filter-error-message {
+  background-color: #fde8e8;
+  color: #e53e3e;
+  padding: 8px 12px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  border-left: 4px solid #e53e3e;
+}
+
+/* フィルターアイコン */
+.filter-indicator {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  color: #1976d2;
+  font-size: 12px;
+}
+
+/* フィルター適用時のセルスタイル */
+.filtered-column th {
+  position: relative;
+}
+
+.filtered-column th::after {
+  content: '🔍';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  font-size: 12px;
+  color: #1976d2;
+}
